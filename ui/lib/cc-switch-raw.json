@@ -1,0 +1,1182 @@
+{
+  "claude": [
+    {
+      "name": "Claude Official",
+      "website": "https://www.anthropic.com/claude-code",
+      "base_url": "",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Kimi",
+      "website": "https://platform.kimi.com?aff=cc-switch",
+      "base_url": "https://api.moonshot.cn/anthropic",
+      "model": "kimi-k2.7-code",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Kimi For Coding",
+      "website": "https://www.kimi.com/code/?aff=cc-switch",
+      "base_url": "https://api.kimi.com/coding",
+      "model": "kimi-for-coding",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "PackyCode",
+      "website": "https://www.packyapi.com",
+      "base_url": "https://www.packyapi.com",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "ZetaAPI",
+      "website": "https://zetaapi.ai",
+      "base_url": "https://api.zetaapi.ai",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "APINebula",
+      "website": "https://apinebula.com",
+      "base_url": "https://apinebula.com",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "AICodeMirror",
+      "website": "https://www.aicodemirror.com",
+      "base_url": "https://api.aicodemirror.com/api/claudecode",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "PatewayAI",
+      "website": "https://pateway.ai",
+      "base_url": "https://api.pateway.ai",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "api_key",
+      "official": false
+    },
+    {
+      "name": "FennoAI",
+      "website": "https://api.fenno.ai",
+      "base_url": "https://api.fenno.ai",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "RunAPI",
+      "website": "https://runapi.co",
+      "base_url": "https://runapi.co",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Unity2.ai",
+      "website": "https://unity2.ai",
+      "base_url": "https://api.unity2.ai",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Shengsuanyun",
+      "website": "https://www.shengsuanyun.com/?from=CH_4HHXMRYF",
+      "base_url": "https://router.shengsuanyun.com/api",
+      "model": "anthropic/claude-sonnet-5",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "AIGoCode",
+      "website": "https://aigocode.com",
+      "base_url": "https://api.aigocode.com",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "SubRouter",
+      "website": "https://subrouter.ai",
+      "base_url": "https://subrouter.ai",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "APIKEY.FUN",
+      "website": "https://apikey.fun",
+      "base_url": "https://api.apikey.fun",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "ClaudeAPI",
+      "website": "https://claudeapi.com",
+      "base_url": "https://gw.claudeapi.com",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Code0",
+      "website": "https://code0.ai",
+      "base_url": "https://code0.ai",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "TeamoRouter",
+      "website": "https://teamorouter.com",
+      "base_url": "https://api.teamorouter.com",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "ClaudeCN",
+      "website": "https://claudecn.top",
+      "base_url": "https://claudecn.top",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "火山Agentplan",
+      "website": "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "base_url": "https://ark.cn-beijing.volces.com/api/coding",
+      "model": "ark-code-latest",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "BytePlus",
+      "website": "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "base_url": "https://ark.ap-southeast.bytepluses.com/api/coding",
+      "model": "ark-code-latest",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "DouBaoSeed",
+      "website": "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "base_url": "https://ark.cn-beijing.volces.com/api/compatible",
+      "model": "doubao-seed-2-1-pro-260628",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "SiliconFlow",
+      "website": "https://siliconflow.cn",
+      "base_url": "https://api.siliconflow.cn",
+      "model": "Pro/MiniMaxAI/MiniMax-M2.7",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "SiliconFlow en",
+      "website": "https://siliconflow.com",
+      "base_url": "https://api.siliconflow.com",
+      "model": "MiniMaxAI/MiniMax-M2.7",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "NekoCode",
+      "website": "https://nekocode.ai",
+      "base_url": "https://nekocode.ai",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "AtlasCloud",
+      "website": "https://www.atlascloud.ai/console/coding-plan",
+      "base_url": "https://api.atlascloud.ai",
+      "model": "zai-org/glm-5.1",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Compshare",
+      "website": "https://www.compshare.cn",
+      "base_url": "https://api.modelverse.cn",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Compshare Coding Plan",
+      "website": "https://www.compshare.cn",
+      "base_url": "https://cp.compshare.cn",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "CCSub",
+      "website": "https://www.ccsub.net",
+      "base_url": "https://www.ccsub.net",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "SSSAiCode",
+      "website": "https://sssaicodeapi.com",
+      "base_url": "https://node-hk.sssaicodeapi.com/api",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Micu",
+      "website": "https://www.micuapi.ai",
+      "base_url": "https://www.micuapi.ai",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "RightCode",
+      "website": "https://www.right.codes",
+      "base_url": "https://www.right.codes/claude",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "ETok.ai",
+      "website": "https://etok.ai",
+      "base_url": "https://api.etok.ai",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Cubence",
+      "website": "https://cubence.com",
+      "base_url": "https://api.cubence.com",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "CrazyRouter",
+      "website": "https://www.crazyrouter.com",
+      "base_url": "https://cn.crazyrouter.com",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "DMXAPI",
+      "website": "https://www.dmxapi.cn",
+      "base_url": "https://www.dmxapi.cn",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Qiniu",
+      "website": "https://s.qiniu.com/nMvAvy",
+      "base_url": "https://api.qnaigc.com",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "SudoCode.chat",
+      "website": "https://sudocode.chat",
+      "base_url": "https://api.sudocode.chat",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "SudoCode.us",
+      "website": "https://sudocode.us",
+      "base_url": "https://sudocode.us",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Amux",
+      "website": "https://amux.ai",
+      "base_url": "https://api.amux.ai",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Gemini Native",
+      "website": "https://ai.google.dev/gemini-api",
+      "base_url": "https://generativelanguage.googleapis.com",
+      "model": "gemini-3.5-flash",
+      "small_fast_model": "",
+      "auth_style": "api_key",
+      "official": false
+    },
+    {
+      "name": "DeepSeek",
+      "website": "https://platform.deepseek.com",
+      "base_url": "https://api.deepseek.com/anthropic",
+      "model": "deepseek-v4-pro",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "OpenCode Go",
+      "website": "https://opencode.ai/go",
+      "base_url": "https://opencode.ai/zen/go",
+      "model": "deepseek-v4-flash",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Zhipu GLM",
+      "website": "https://open.bigmodel.cn",
+      "base_url": "https://open.bigmodel.cn/api/anthropic",
+      "model": "glm-5.1",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Zhipu GLM en",
+      "website": "https://z.ai",
+      "base_url": "https://api.z.ai/api/anthropic",
+      "model": "glm-5.1",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Baidu Qianfan Coding Plan",
+      "website": "https://cloud.baidu.com/product/qianfan_modelbuilder",
+      "base_url": "https://qianfan.baidubce.com/anthropic/coding",
+      "model": "qianfan-code-latest",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Bailian",
+      "website": "https://bailian.console.aliyun.com",
+      "base_url": "https://dashscope.aliyuncs.com/apps/anthropic",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Bailian For Coding",
+      "website": "https://bailian.console.aliyun.com",
+      "base_url": "https://coding.dashscope.aliyuncs.com/apps/anthropic",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "StepFun",
+      "website": "https://platform.stepfun.com/step-plan",
+      "base_url": "https://api.stepfun.com/step_plan",
+      "model": "step-3.5-flash-2603",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "StepFun en",
+      "website": "https://platform.stepfun.ai/step-plan",
+      "base_url": "https://api.stepfun.ai/step_plan",
+      "model": "step-3.5-flash-2603",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "ModelScope",
+      "website": "https://modelscope.cn",
+      "base_url": "https://api-inference.modelscope.cn",
+      "model": "ZhipuAI/GLM-5.1",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "KAT-Coder",
+      "website": "https://console.streamlake.ai",
+      "base_url": "https://vanchin.streamlake.ai/api/gateway/v1/endpoints/${ENDPOINT_ID}/claude-code-proxy",
+      "model": "KAT-Coder-Pro V1",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Longcat",
+      "website": "https://longcat.chat/platform",
+      "base_url": "https://api.longcat.chat/anthropic",
+      "model": "LongCat-2.0",
+      "small_fast_model": "LongCat-2.0",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "MiniMax",
+      "website": "https://platform.minimaxi.com",
+      "base_url": "https://api.minimaxi.com/anthropic",
+      "model": "MiniMax-M2.7",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "MiniMax en",
+      "website": "https://platform.minimax.io",
+      "base_url": "https://api.minimax.io/anthropic",
+      "model": "MiniMax-M2.7",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "BaiLing",
+      "website": "https://alipaytbox.yuque.com/sxs0ba/ling/get_started",
+      "base_url": "https://api.tbox.cn/api/anthropic",
+      "model": "Ling-2.5-1T",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "AiHubMix",
+      "website": "https://aihubmix.com",
+      "base_url": "https://aihubmix.com",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "api_key",
+      "official": false
+    },
+    {
+      "name": "CherryIN",
+      "website": "https://open.cherryin.ai",
+      "base_url": "https://open.cherryin.net",
+      "model": "anthropic/claude-sonnet-5",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "RelaxyCode",
+      "website": "https://www.relaxycode.com",
+      "base_url": "https://www.relaxycode.com",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "E-FlowCode",
+      "website": "https://e-flowcode.cc",
+      "base_url": "https://e-flowcode.cc",
+      "model": "",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "OpenRouter",
+      "website": "https://openrouter.ai",
+      "base_url": "https://openrouter.ai/api",
+      "model": "anthropic/claude-sonnet-5",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "TheRouter",
+      "website": "https://therouter.ai",
+      "base_url": "https://api.therouter.ai",
+      "model": "anthropic/claude-sonnet-5",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Novita AI",
+      "website": "https://novita.ai",
+      "base_url": "https://api.novita.ai/anthropic",
+      "model": "zai-org/glm-5.1",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "GitHub Copilot",
+      "website": "https://github.com/features/copilot",
+      "base_url": "https://api.githubcopilot.com",
+      "model": "claude-sonnet-5",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Codex",
+      "website": "https://openai.com/chatgpt/pricing",
+      "base_url": "https://chatgpt.com/backend-api/codex",
+      "model": "gpt-5.6",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "xAI (Grok)",
+      "website": "https://x.ai/grok",
+      "base_url": "https://api.x.ai/v1",
+      "model": "grok-4.5",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Nvidia",
+      "website": "https://build.nvidia.com",
+      "base_url": "https://integrate.api.nvidia.com",
+      "model": "moonshotai/kimi-k2.5",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "PIPELLM",
+      "website": "https://code.pipellm.ai",
+      "base_url": "https://cc-api.pipellm.ai",
+      "model": "claude-opus-4-8",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Xiaomi MiMo",
+      "website": "https://platform.xiaomimimo.com",
+      "base_url": "https://api.xiaomimimo.com/anthropic",
+      "model": "mimo-v2.5-pro",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "Xiaomi MiMo Token Plan (China)",
+      "website": "https://platform.xiaomimimo.com/#/token-plan",
+      "base_url": "https://token-plan-cn.xiaomimimo.com/anthropic",
+      "model": "mimo-v2.5-pro",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "AWS Bedrock (AKSK)",
+      "website": "https://aws.amazon.com/bedrock/",
+      "base_url": "https://bedrock-runtime.${AWS_REGION}.amazonaws.com",
+      "model": "global.anthropic.claude-opus-4-8",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    },
+    {
+      "name": "AWS Bedrock (API Key)",
+      "website": "https://aws.amazon.com/bedrock/",
+      "base_url": "https://bedrock-runtime.${AWS_REGION}.amazonaws.com",
+      "model": "global.anthropic.claude-opus-4-8",
+      "small_fast_model": "",
+      "auth_style": "auth_token",
+      "official": false
+    }
+  ],
+  "codex": [
+    {
+      "name": "OpenAI Official",
+      "website": "https://chatgpt.com/codex",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": true
+    },
+    {
+      "name": "Kimi",
+      "website": "https://platform.kimi.com?aff=cc-switch",
+      "base_url": "",
+      "model": "kimi-k2.7-code",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Kimi For Coding",
+      "website": "https://www.kimi.com/code/?aff=cc-switch",
+      "base_url": "",
+      "model": "kimi-for-coding",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "PackyCode",
+      "website": "https://www.packyapi.com",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "ZetaAPI",
+      "website": "https://zetaapi.ai",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "APINebula",
+      "website": "https://apinebula.com",
+      "base_url": "https://apinebula.com/v1",
+      "model": "gpt-5.5",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "AICodeMirror",
+      "website": "https://www.aicodemirror.com",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "PatewayAI",
+      "website": "https://pateway.ai",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "FennoAI",
+      "website": "https://api.fenno.ai",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "RunAPI",
+      "website": "https://runapi.co",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Unity2.ai",
+      "website": "https://unity2.ai",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Shengsuanyun",
+      "website": "https://www.shengsuanyun.com/?from=CH_4HHXMRYF",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "AIGoCode",
+      "website": "https://aigocode.com",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "SubRouter",
+      "website": "https://subrouter.ai",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "APIKEY.FUN",
+      "website": "https://apikey.fun",
+      "base_url": "https://api.apikey.fun/v1",
+      "model": "gpt-5.5",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Code0",
+      "website": "https://code0.ai",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "TeamoRouter",
+      "website": "https://teamorouter.com",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "ClaudeCN",
+      "website": "https://claudecn.top",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "火山Agentplan",
+      "website": "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "base_url": "",
+      "model": "ark-code-latest",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "BytePlus",
+      "website": "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "base_url": "",
+      "model": "ark-code-latest",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "DouBaoSeed",
+      "website": "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "base_url": "",
+      "model": "doubao-seed-2-1-pro-260628",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "SiliconFlow",
+      "website": "https://siliconflow.cn",
+      "base_url": "",
+      "model": "Pro/MiniMaxAI/MiniMax-M2.7",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "SiliconFlow en",
+      "website": "https://siliconflow.com",
+      "base_url": "",
+      "model": "MiniMaxAI/MiniMax-M2.7",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "NekoCode",
+      "website": "https://nekocode.ai",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "AtlasCloud",
+      "website": "https://www.atlascloud.ai/console/coding-plan",
+      "base_url": "https://api.atlascloud.ai/v1",
+      "model": "zai-org/glm-5.1",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Compshare",
+      "website": "https://www.compshare.cn",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Compshare Coding Plan",
+      "website": "https://www.compshare.cn",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "CCSub",
+      "website": "https://www.ccsub.net",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "SSSAiCode",
+      "website": "https://sssaicodeapi.com",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Micu",
+      "website": "https://www.micuapi.ai",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "RightCode",
+      "website": "https://www.right.codes",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "ETok.ai",
+      "website": "https://etok.ai",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Cubence",
+      "website": "https://cubence.com",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "CrazyRouter",
+      "website": "https://www.crazyrouter.com",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "DMXAPI",
+      "website": "https://www.dmxapi.cn",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Qiniu",
+      "website": "https://s.qiniu.com/nMvAvy",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "SudoCode.chat",
+      "website": "https://sudocode.chat",
+      "base_url": "https://api.sudocode.chat/v1",
+      "model": "gpt-5.6-sol",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "SudoCode.us",
+      "website": "https://sudocode.us",
+      "base_url": "https://sudocode.us/v1",
+      "model": "gpt-5.5",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Amux",
+      "website": "https://amux.ai",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Azure OpenAI",
+      "website": "https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/codex",
+      "base_url": "https://YOUR_RESOURCE_NAME.openai.azure.com/openai",
+      "model": "gpt-5.5",
+      "wire_api": "responses",
+      "official": true
+    },
+    {
+      "name": "DeepSeek",
+      "website": "https://platform.deepseek.com",
+      "base_url": "",
+      "model": "deepseek-v4-flash",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Zhipu GLM",
+      "website": "https://open.bigmodel.cn",
+      "base_url": "",
+      "model": "glm-5.2",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Zhipu GLM en",
+      "website": "https://z.ai",
+      "base_url": "",
+      "model": "glm-5.2",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Baidu Qianfan Coding Plan",
+      "website": "https://cloud.baidu.com/product/qianfan_modelbuilder",
+      "base_url": "",
+      "model": "qianfan-code-latest",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Bailian",
+      "website": "https://bailian.console.aliyun.com",
+      "base_url": "",
+      "model": "qwen3-coder-plus",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "StepFun",
+      "website": "https://platform.stepfun.com/step-plan",
+      "base_url": "",
+      "model": "step-3.7-flash",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "StepFun en",
+      "website": "https://platform.stepfun.ai/step-plan",
+      "base_url": "",
+      "model": "step-3.7-flash",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "ModelScope",
+      "website": "https://modelscope.cn",
+      "base_url": "",
+      "model": "ZhipuAI/GLM-5.1",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Longcat",
+      "website": "https://longcat.chat/platform",
+      "base_url": "",
+      "model": "LongCat-2.0",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "MiniMax",
+      "website": "https://platform.minimaxi.com",
+      "base_url": "",
+      "model": "MiniMax-M3",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "MiniMax en",
+      "website": "https://platform.minimax.io",
+      "base_url": "",
+      "model": "MiniMax-M3",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "BaiLing",
+      "website": "https://alipaytbox.yuque.com/sxs0ba/ling/get_started",
+      "base_url": "",
+      "model": "Ling-2.6-1T",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Xiaomi MiMo",
+      "website": "https://platform.xiaomimimo.com",
+      "base_url": "",
+      "model": "mimo-v2.5-pro",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Xiaomi MiMo Token Plan (China)",
+      "website": "https://platform.xiaomimimo.com/#/token-plan",
+      "base_url": "",
+      "model": "mimo-v2.5-pro",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Novita AI",
+      "website": "https://novita.ai",
+      "base_url": "",
+      "model": "zai-org/glm-5.1",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "xAI (Grok)",
+      "website": "https://x.ai/api",
+      "base_url": "",
+      "model": "grok-4.5",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "xAI (Grok) OAuth",
+      "website": "https://x.ai/grok",
+      "base_url": "",
+      "model": "grok-4.5",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "Nvidia",
+      "website": "https://build.nvidia.com",
+      "base_url": "",
+      "model": "moonshotai/kimi-k2.5",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "OpenCode Go",
+      "website": "https://opencode.ai/go",
+      "base_url": "",
+      "model": "glm-5.2",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "AiHubMix",
+      "website": "https://aihubmix.com",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "CherryIN",
+      "website": "https://open.cherryin.ai",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "RelaxyCode",
+      "website": "https://www.relaxycode.com",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "E-FlowCode",
+      "website": "https://e-flowcode.cc",
+      "base_url": "https://e-flowcode.cc/v1",
+      "model": "gpt-5.5",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "PIPELLM",
+      "website": "https://code.pipellm.ai",
+      "base_url": "https://cc-api.pipellm.ai/v1",
+      "model": "gpt-5.5",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "OpenRouter",
+      "website": "https://openrouter.ai",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    },
+    {
+      "name": "TheRouter",
+      "website": "https://therouter.ai",
+      "base_url": "",
+      "model": "",
+      "wire_api": "responses",
+      "official": false
+    }
+  ]
+}

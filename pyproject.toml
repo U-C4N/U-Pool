@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "u-pool"
+version = "0.3.0"
+description = "Provider switcher for Claude Code and Codex"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pywebview>=5.3",
+    "tomlkit>=0.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pyinstaller>=6.6",
+]
+
+[project.scripts]
+u-pool = "upool.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

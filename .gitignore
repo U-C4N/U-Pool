@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# UI
+ui/node_modules/
+ui/.next/
+ui/out/
+ui/next-env.d.ts
+ui/tsconfig.tsbuildinfo
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Local agent tooling
+skills-lock.json
+.agents/
