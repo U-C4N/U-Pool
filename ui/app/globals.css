@@ -14,14 +14,14 @@
   --color-accent-500: #ff9f0a;
   --color-accent-600: #e68600;
 
-  --color-surface: rgba(255, 255, 255, 0.55);
-  --color-grouped: #e8eef8;
+  --color-surface: rgba(255, 255, 255, 0.58);
+  --color-grouped: #e8edf5;
   --color-label: #0b1220;
-  --color-secondary-label: rgba(15, 23, 42, 0.55);
+  --color-secondary-label: rgba(15, 23, 42, 0.56);
   --color-tertiary-label: rgba(15, 23, 42, 0.38);
   --color-separator: rgba(15, 23, 42, 0.08);
-  --color-fill: rgba(255, 255, 255, 0.45);
-  --color-fill-strong: rgba(255, 255, 255, 0.7);
+  --color-fill: rgba(255, 255, 255, 0.48);
+  --color-fill-strong: rgba(255, 255, 255, 0.72);
 
   --font-sans: "Manrope Variable", "Manrope", -apple-system, BlinkMacSystemFont,
     "SF Pro Text", "Segoe UI Variable Display", sans-serif;
@@ -31,8 +31,11 @@
   color-scheme: light;
   --spring: cubic-bezier(0.22, 1, 0.36, 1);
   --spring-bounce: cubic-bezier(0.34, 1.4, 0.64, 1);
-  --liquid-blur: 28px;
-  --liquid-saturate: 190%;
+  --liquid-blur: 32px;
+  --liquid-saturate: 180%;
+  --bg-base: #e8edf5;
+  --bg-mid: #eef2f8;
+  --bg-top: #f7f8fb;
 }
 
 html,
@@ -52,52 +55,57 @@ body {
   user-select: none;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  background:
-    radial-gradient(900px 520px at 12% -10%, rgba(10, 132, 255, 0.28), transparent 58%),
-    radial-gradient(760px 480px at 88% 0%, rgba(255, 159, 10, 0.16), transparent 55%),
-    radial-gradient(640px 420px at 55% 110%, rgba(10, 132, 255, 0.1), transparent 50%),
-    linear-gradient(180deg, #eef3fb 0%, #e5ecf7 45%, #dde6f4 100%);
+  /* Spatial atmosphere: top light + soft depth, no looping motion. */
+  background-color: var(--bg-base);
+  background-image:
+    radial-gradient(120% 70% at 50% -18%, rgba(255, 255, 255, 0.95), transparent 58%),
+    radial-gradient(55% 42% at 8% 72%, rgba(0, 122, 255, 0.09), transparent 70%),
+    radial-gradient(48% 38% at 94% 78%, rgba(255, 159, 10, 0.07), transparent 68%),
+    radial-gradient(70% 50% at 50% 100%, rgba(15, 23, 42, 0.04), transparent 65%),
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 42%, var(--bg-base) 100%);
   background-attachment: fixed;
 }
 
-/* Soft luminous orbs behind the glass — make materials read as liquid. */
+/* Fixed light wells — depth without vestibular drift. */
 body::before,
 body::after {
   content: "";
   pointer-events: none;
   position: fixed;
   z-index: 0;
-  border-radius: 9999px;
-  filter: blur(60px);
-  opacity: 0.55;
+  border-radius: 50%;
+  filter: blur(72px);
 }
 
 body::before {
-  width: 340px;
-  height: 340px;
-  top: -80px;
-  left: 18%;
-  background: rgba(90, 170, 255, 0.55);
-  animation: liquid-drift-a 14s var(--spring) infinite alternate;
+  width: min(52vw, 420px);
+  height: min(52vw, 420px);
+  top: -12%;
+  left: 22%;
+  background: rgba(120, 180, 255, 0.28);
+  opacity: 0.7;
 }
 
 body::after {
-  width: 280px;
-  height: 280px;
-  right: 8%;
-  bottom: 12%;
-  background: rgba(255, 190, 120, 0.45);
-  animation: liquid-drift-b 18s var(--spring) infinite alternate;
+  width: min(44vw, 360px);
+  height: min(44vw, 360px);
+  right: 4%;
+  bottom: 6%;
+  background: rgba(255, 200, 140, 0.22);
+  opacity: 0.65;
 }
 
-@keyframes liquid-drift-a {
-  from { transform: translate3d(0, 0, 0) scale(1); }
-  to { transform: translate3d(40px, 30px, 0) scale(1.08); }
-}
-
-@keyframes liquid-drift-b {
-  from { transform: translate3d(0, 0, 0) scale(1); }
-  to { transform: translate3d(-36px, -24px, 0) scale(1.12); }
+/* Fine grain so glass materials catch real texture. */
+#__upool-root::before {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.35;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
 }
 
 #__upool-root,
@@ -199,24 +207,24 @@ textarea,
   animation: upool-sheet-in 420ms var(--spring-bounce);
 }
 
-/* Liquid Glass material */
+/* Translucent materials — hierarchy via weight, not glow. */
 .liquid-glass {
   position: relative;
+  isolation: isolate;
   background:
     linear-gradient(
-      155deg,
-      rgba(255, 255, 255, 0.72) 0%,
-      rgba(255, 255, 255, 0.38) 42%,
-      rgba(255, 255, 255, 0.55) 100%
+      180deg,
+      rgba(255, 255, 255, 0.62) 0%,
+      rgba(255, 255, 255, 0.42) 100%
     );
   backdrop-filter: saturate(var(--liquid-saturate)) blur(var(--liquid-blur));
   -webkit-backdrop-filter: saturate(var(--liquid-saturate)) blur(var(--liquid-blur));
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.58);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.15),
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 18px 50px -24px rgba(15, 23, 42, 0.35);
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    inset 0 -0.5px 0 rgba(15, 23, 42, 0.04),
+    0 1px 1px rgba(15, 23, 42, 0.03),
+    0 14px 40px -20px rgba(15, 23, 42, 0.28);
 }
 
 .liquid-glass::before {
@@ -224,43 +232,87 @@ textarea,
   pointer-events: none;
   position: absolute;
   inset: 0;
+  z-index: 0;
   border-radius: inherit;
   background: linear-gradient(
-    120deg,
-    rgba(255, 255, 255, 0.55) 0%,
-    rgba(255, 255, 255, 0) 35%,
-    rgba(255, 255, 255, 0.18) 70%,
-    rgba(255, 255, 255, 0) 100%
+    165deg,
+    rgba(255, 255, 255, 0.45) 0%,
+    rgba(255, 255, 255, 0) 42%,
+    rgba(255, 255, 255, 0.12) 100%
   );
-  opacity: 0.55;
-  mix-blend-mode: soft-light;
+  opacity: 0.7;
 }
 
 .liquid-glass-strong {
   background:
     linear-gradient(
-      160deg,
-      rgba(255, 255, 255, 0.82) 0%,
-      rgba(255, 255, 255, 0.5) 48%,
-      rgba(255, 255, 255, 0.68) 100%
+      180deg,
+      rgba(255, 255, 255, 0.78) 0%,
+      rgba(255, 255, 255, 0.58) 100%
     );
-  backdrop-filter: saturate(200%) blur(36px);
-  -webkit-backdrop-filter: saturate(200%) blur(36px);
-  border: 1px solid rgba(255, 255, 255, 0.65);
+  backdrop-filter: saturate(190%) blur(40px);
+  -webkit-backdrop-filter: saturate(190%) blur(40px);
+  border: 1px solid rgba(255, 255, 255, 0.68);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
-    0 1px 2px rgba(15, 23, 42, 0.05),
-    0 28px 70px -28px rgba(15, 23, 42, 0.4);
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 24px 60px -28px rgba(15, 23, 42, 0.32);
 }
 
 .liquid-pill {
-  background: rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(16px) saturate(160%);
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(18px) saturate(165%);
+  -webkit-backdrop-filter: blur(18px) saturate(165%);
+  border: 1px solid rgba(255, 255, 255, 0.5);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    0 8px 24px -16px rgba(15, 23, 42, 0.28);
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    0 6px 18px -12px rgba(15, 23, 42, 0.22);
+}
+
+/* Sticky chrome — content scrolls underneath, soft scroll-edge fade. */
+.upool-header {
+  position: sticky;
+  top: 0;
+  background: rgba(247, 248, 251, 0.62);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 1px 0 rgba(15, 23, 42, 0.04);
+}
+
+.upool-header::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -16px;
+  height: 16px;
+  background: linear-gradient(180deg, rgba(232, 237, 245, 0.45), transparent);
+}
+
+/* Segmented control — Apple-style switcher. */
+.upool-segment {
+  border-radius: 11px;
+  background: rgba(15, 23, 42, 0.06);
+  box-shadow: inset 0 0.5px 1px rgba(15, 23, 42, 0.06);
+}
+
+.upool-segment-thumb {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.08),
+    0 4px 10px -4px rgba(15, 23, 42, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
+  transition:
+    transform 280ms var(--spring),
+    opacity 200ms ease-out;
 }
 
 .display-title {
@@ -284,13 +336,17 @@ textarea,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body::before,
-  body::after,
   .brand-wordmark,
   .animate-toast-in,
   .animate-fade-in,
   .animate-sheet-in {
     animation: none !important;
+  }
+
+  .animate-toast-in,
+  .animate-fade-in,
+  .animate-sheet-in {
+    transition: opacity 200ms ease;
   }
 
   .pressable {
@@ -305,14 +361,20 @@ textarea,
 @media (prefers-reduced-transparency: reduce) {
   .liquid-glass,
   .liquid-glass-strong,
-  .liquid-pill {
+  .liquid-pill,
+  .upool-header {
     background: #ffffff;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
 
+  .upool-header::after {
+    display: none;
+  }
+
   body::before,
-  body::after {
+  body::after,
+  #__upool-root::before {
     display: none;
   }
 }

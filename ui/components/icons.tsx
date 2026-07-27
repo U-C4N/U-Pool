@@ -1,8 +1,6 @@
 /**
- * Hand-rolled 20px stroke icons.
- *
- * An icon package would add a dependency and a chunk of bundle for the dozen
- * glyphs this app uses, so they live here instead.
+ * Hand-rolled icons — SF Symbols–inspired strokes.
+ * Kept in-repo to avoid an icon-package dependency for a small set.
  */
 type IconProps = React.SVGProps<SVGSVGElement>;
 
@@ -12,7 +10,7 @@ function Svg({ children, ...props }: IconProps) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.75}
+      strokeWidth={1.6}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -23,113 +21,132 @@ function Svg({ children, ...props }: IconProps) {
   );
 }
 
+/** Add — rounded plus. */
 export const PlusIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M12 5v14M5 12h14" />
+    <path d="M12 6.5v11M6.5 12h11" />
   </Svg>
 );
 
+/** Settings — horizontal sliders (SF: slider.horizontal.3). */
 export const GearIcon = (p: IconProps) => (
   <Svg {...p}>
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z" />
+    <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+    <path d="M4 12h4M12 12h8" />
+    <circle cx="16" cy="7" r="2" />
+    <circle cx="8" cy="17" r="2" />
+    <circle cx="10" cy="12" r="2" />
   </Svg>
 );
 
+/** Edit — fountain pen tip. */
 export const PencilIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M12 20h9" />
-    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    <path d="m14.5 4.5 5 5" />
+    <path d="M5 19.5 17.5 7 14.5 4 2 16.5V19.5H5Z" />
+    <path d="M11 5.5 16 10.5" />
   </Svg>
 );
 
+/** Duplicate — stacked rectangles. */
 export const CopyIcon = (p: IconProps) => (
   <Svg {...p}>
-    <rect x="9" y="9" width="12" height="12" rx="2" />
-    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    <rect x="8" y="8" width="11" height="11" rx="2.5" />
+    <path d="M6 15.5H5.5A2.5 2.5 0 0 1 3 13V5.5A2.5 2.5 0 0 1 5.5 3H13a2.5 2.5 0 0 1 2.5 2.5V6" />
   </Svg>
 );
 
+/** Test connection — signal / radiowaves. */
 export const PulseIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+    <path d="M12 18.5v.01" />
+    <path d="M8.5 15.2a5 5 0 0 1 7 0" />
+    <path d="M5.5 12.2a9 9 0 0 1 13 0" />
+    <path d="M2.8 9.2a13 13 0 0 1 18.4 0" />
   </Svg>
 );
 
+/** Delete — trash with lid lift. */
 export const TrashIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-    <path d="M10 11v6M14 11v6" />
+    <path d="M4.5 7h15" />
+    <path d="M9.5 7V5.8A1.3 1.3 0 0 1 10.8 4.5h2.4A1.3 1.3 0 0 1 14.5 5.8V7" />
+    <path d="M18 7v11.2A1.8 1.8 0 0 1 16.2 20H7.8A1.8 1.8 0 0 1 6 18.2V7" />
+    <path d="M10 10.5v5.5M14 10.5v5.5" />
   </Svg>
 );
 
 export const CheckIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M20 6 9 17l-5-5" />
+    <path d="m5.5 12.5 4 4 9-9.5" />
   </Svg>
 );
 
 export const CheckCircleIcon = (p: IconProps) => (
   <Svg {...p}>
-    <circle cx="12" cy="12" r="9" />
-    <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+    <circle cx="12" cy="12" r="8.25" />
+    <path d="m8.4 12.2 2.4 2.4 4.8-5" />
   </Svg>
 );
 
 export const AlertIcon = (p: IconProps) => (
   <Svg {...p}>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 8v5M12 16h.01" />
+    <path d="M12 4.2 20.2 19.2a.9.9 0 0 1-.78 1.35H4.58a.9.9 0 0 1-.78-1.35L12 4.2Z" />
+    <path d="M12 10v4.2M12 16.8h.01" />
   </Svg>
 );
 
 export const XIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M18 6 6 18M6 6l12 12" />
+    <path d="m7 7 10 10M17 7 7 17" />
   </Svg>
 );
 
 export const ArrowLeftIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M19 12H5M12 19l-7-7 7-7" />
+    <path d="M15.5 5.5 9 12l6.5 6.5" />
+    <path d="M9 12h10" />
   </Svg>
 );
 
 export const ChevronIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="m9 18 6-6-6-6" />
+    <path d="m9.5 6 5.5 6-5.5 6" />
   </Svg>
 );
 
+/** Open config — open folder with papers. */
 export const FolderIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+    <path d="M3.5 9.5V7.2A1.7 1.7 0 0 1 5.2 5.5h4.1l1.6 1.7h7.9A1.7 1.7 0 0 1 20.5 9v.5" />
+    <path d="M3.5 10.5h17l-1.4 7.2a1.7 1.7 0 0 1-1.7 1.4H6.6a1.7 1.7 0 0 1-1.7-1.4L3.5 10.5Z" />
   </Svg>
 );
 
 export const GripIcon = (p: IconProps) => (
-  <Svg {...p} strokeWidth={2}>
-    <circle cx="9" cy="6" r="1" />
-    <circle cx="9" cy="12" r="1" />
-    <circle cx="9" cy="18" r="1" />
-    <circle cx="15" cy="6" r="1" />
-    <circle cx="15" cy="12" r="1" />
-    <circle cx="15" cy="18" r="1" />
+  <Svg {...p} strokeWidth={0} fill="currentColor">
+    <circle cx="9" cy="7" r="1.35" />
+    <circle cx="9" cy="12" r="1.35" />
+    <circle cx="9" cy="17" r="1.35" />
+    <circle cx="15" cy="7" r="1.35" />
+    <circle cx="15" cy="12" r="1.35" />
+    <circle cx="15" cy="17" r="1.35" />
   </Svg>
 );
 
 export const EyeIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
-    <circle cx="12" cy="12" r="3" />
+    <path d="M2.5 12s3.8-6.5 9.5-6.5S21.5 12 21.5 12 17.7 18.5 12 18.5 2.5 12 2.5 12Z" />
+    <circle cx="12" cy="12" r="2.75" />
   </Svg>
 );
 
 export const EyeOffIcon = (p: IconProps) => (
   <Svg {...p}>
-    <path d="M3 3l18 18" />
-    <path d="M10.6 10.6a3 3 0 0 0 4.2 4.2" />
-    <path d="M9.4 5.2A9.5 9.5 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.2 6.6A17 17 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 3.6-.7" />
+    <path d="m3.5 3.5 17 17" />
+    <path d="M10.2 10.3a2.75 2.75 0 0 0 3.5 3.5" />
+    <path d="M8.1 5.6A10 10 0 0 1 12 5.5c5.7 0 9.5 6.5 9.5 6.5a16 16 0 0 1-3.5 4.2" />
+    <path d="M6.2 6.8A16 16 0 0 0 2.5 12S6.3 18.5 12 18.5a9.4 9.4 0 0 0 3.9-.8" />
   </Svg>
 );
 

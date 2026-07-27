@@ -25,11 +25,11 @@ export function IconButton({
       title={label}
       aria-label={label}
       className={cx(
-        "pressable grid h-8 w-8 place-items-center rounded-full text-[var(--color-secondary-label)]",
-        "hover:bg-white/55 hover:text-[var(--color-label)]",
+        "pressable grid h-8 w-8 place-items-center rounded-[10px] text-[var(--color-secondary-label)]",
+        "hover:bg-black/[0.05] hover:text-[var(--color-label)]",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500",
         "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
-        active && "bg-white/70 text-[var(--color-label)]",
+        active && "bg-black/[0.06] text-[var(--color-label)]",
         danger && "hover:bg-red-50/80 hover:text-red-600",
         className,
       )}
