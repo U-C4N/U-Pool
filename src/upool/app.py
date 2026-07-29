@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import sys
 
-from . import paths
+from . import autostart, paths, settings
 from .api import APP_VERSION, Api
 from .server import UiServer
 
@@ -27,6 +27,15 @@ def _truthy(name: str) -> bool:
 def run(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     debug = _truthy("UPOOL_DEBUG") or "--debug" in argv
+
+    # A bundle that was moved or reinstalled elsewhere would leave a startup entry
+    # pointing at a path that no longer exists, so it is refreshed on every launch.
+    # Launched at sign-in there is no console to print to, so nothing here may be
+    # allowed to stop a window from appearing.
+    try:
+        autostart.reconcile(settings.load()["launch_at_startup"])
+    except Exception:  # noqa: BLE001 - housekeeping, never a reason not to start
+        pass
 
     # Importing pywebview costs real time; keep it out of the module import path
     # so `python -m upool --version` and the test suite stay instant.

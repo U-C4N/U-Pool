@@ -7,7 +7,14 @@
  * layout can be built and reviewed without launching the desktop shell. It
  * mirrors the envelope shape of the real endpoints, nothing more.
  */
-import type { AppId, AppState, Bootstrap, HealthResult, ProviderDetail } from "./types";
+import type {
+  AppId,
+  AppSettings,
+  AppState,
+  Bootstrap,
+  HealthResult,
+  ProviderDetail,
+} from "./types";
 
 type Envelope<T> = { ok: boolean; data?: T; error?: string };
 
@@ -34,11 +41,25 @@ function seed(app: AppId, name: string, base: string, official = false): Provide
     wire_api: "responses",
     env_key: "OPENAI_API_KEY",
     extra: {},
+    bypass_permissions: false,
+    skip_bypass_prompt: false,
+    accept_edits: false,
+    all_project_mcp: false,
+    bypass_approvals: false,
+    web_search: false,
     official,
     created_at: Date.now(),
     updated_at: Date.now(),
   };
 }
+
+const mockSettings: AppSettings = {
+  launch_at_startup: false,
+  autostart_supported: false,
+  autostart_blocked: false,
+  autostart_command: "",
+  autostart_detail: "Browser preview - the real switch needs the desktop app.",
+};
 
 const db: Record<AppId, { current: string; providers: ProviderDetail[] }> = {
   claude: {
@@ -79,13 +100,14 @@ const find = (app: AppId, id: string) => db[app].providers.find((p) => p.id === 
 export const mockApi = {
   bootstrap: () =>
     ok<Bootstrap>({
-      version: "0.3.0-mock",
+      version: "0.4.0-mock",
       platform: "browser",
       apps: [
         { id: "claude", label: "Claude Code" },
         { id: "codex", label: "Codex" },
       ],
       state: { claude: state("claude"), codex: state("codex") },
+      settings: mockSettings,
     }),
   list_providers: (app: AppId) => ok(state(app)),
   get_provider: (app: AppId, id: string) => {
@@ -166,5 +188,20 @@ export const mockApi = {
     return ok(url);
   },
   app_paths: () =>
-    ok({ home: "~/.u-pool", config: "~/.u-pool/config.json", backups: "~/.u-pool/backups" }),
+    ok({
+      home: "~/.u-pool",
+      config: "~/.u-pool/config.json",
+      backups: "~/.u-pool/backups",
+      settings: "~/.u-pool/settings.json",
+    }),
+  // A fresh object per call, like the Python endpoint: React skips a state update
+  // that hands it back the same reference.
+  get_settings: () => ok<AppSettings>({ ...mockSettings }),
+  set_launch_at_startup: (enabled: boolean) => {
+    // The real endpoint refuses outside Windows; the mock says the same thing.
+    if (!mockSettings.autostart_supported) return fail("Launching at sign-in is wired up for Windows only.");
+    mockSettings.launch_at_startup = enabled;
+    return ok<AppSettings>({ ...mockSettings });
+  },
+  open_startup_settings: () => fail("Launching at sign-in is wired up for Windows only."),
 };

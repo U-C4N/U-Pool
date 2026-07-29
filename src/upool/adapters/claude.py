@@ -1,8 +1,13 @@
 """Claude Code adapter - ``~/.claude/settings.json``.
 
 Claude Code reads provider settings from the ``env`` block of its settings
-file. Everything else in that file (permissions, hooks, statusLine, ...) is the
-user's and is preserved untouched.
+file. Everything else in that file (hooks, statusLine, the permission
+allow/deny lists, ...) is the user's and is preserved untouched.
+
+Three keys are exceptions, each behind an explicit checkbox in the provider form:
+``permissions.defaultMode``, ``permissions.skipDangerousModePermissionPrompt`` and
+``enableAllProjectMcpServers``. While a box is ticked U-Pool owns that key;
+unticking it takes the key back out again.
 """
 
 from __future__ import annotations
@@ -34,6 +39,34 @@ MANAGED_KEYS = (
     MODEL_KEY,
     SMALL_FAST_MODEL_KEY,
 )
+
+PERMISSIONS_KEY = "permissions"
+DEFAULT_MODE_KEY = "defaultMode"
+BYPASS_MODE = "bypassPermissions"
+ACCEPT_EDITS_MODE = "acceptEdits"
+PROJECT_MCP_KEY = "enableAllProjectMcpServers"
+DISABLE_BYPASS_KEY = "disableBypassPermissionsMode"
+# Bypass mode otherwise opens with a one-off "do you accept the risk" dialog.
+SKIP_BYPASS_PROMPT_KEY = "skipDangerousModePermissionPrompt"
+# The only two modes U-Pool ever writes. Anything else in ``defaultMode``
+# ("plan", "default", a typo) was put there by hand and is left alone.
+MANAGED_MODES = (BYPASS_MODE, ACCEPT_EDITS_MODE)
+
+
+def permission_mode(provider: Provider) -> str:
+    """``defaultMode`` for a provider, or ``""`` when neither box is ticked.
+
+    Bypass wins over accept-edits: it is the wider of the two, so a provider with
+    both boxes ticked gets the mode the user asked for rather than the safer one
+    they also happened to leave on.
+    """
+    if provider.official:
+        return ""
+    if provider.bypass_permissions:
+        return BYPASS_MODE
+    if provider.accept_edits:
+        return ACCEPT_EDITS_MODE
+    return ""
 
 
 class ClaudeAdapter(Adapter):
@@ -87,12 +120,70 @@ class ClaudeAdapter(Adapter):
         else:
             settings.pop("env", None)
 
+        self._apply_toggles(settings, provider, result)
+
         snap = backup.snapshot(self.app, settings_path)
         if snap:
             result.backups.append(str(snap))
         atomicio.write_json(settings_path, settings, secret=True)
         result.files.append(str(settings_path))
         return result
+
+    def _apply_toggles(self, settings: dict, provider: Provider, result: ApplyResult) -> None:
+        """Project the advanced checkboxes onto settings.json.
+
+        Inside the permissions block only the two keys behind a checkbox are
+        touched - the allow/deny/ask lists and everything else in there stay
+        exactly as the user left them, and the block is only rewritten at all if
+        something in it actually changed.
+        """
+        mode = permission_mode(provider)
+        raw = settings.get(PERMISSIONS_KEY)
+        if raw is not None and not isinstance(raw, dict):
+            # Same rule as a malformed settings.json: do not touch a shape we do not
+            # understand. Say so rather than replacing whatever is in there.
+            result.warnings.append(
+                f"'{PERMISSIONS_KEY}' in settings.json is not an object, so the permission "
+                "switches were skipped."
+            )
+            self._apply_project_mcp(settings, provider)
+            return
+        original = raw or {}
+        block = dict(original)
+
+        if mode:
+            block[DEFAULT_MODE_KEY] = mode
+        elif block.get(DEFAULT_MODE_KEY) in MANAGED_MODES:
+            # A mode we could have written, and nothing wants it now.
+            block.pop(DEFAULT_MODE_KEY, None)
+
+        # Owned by its own checkbox, not by the mode: Claude Code ignores it outside
+        # bypass mode, so removing it there would drop a key that is still ticked.
+        if provider.skip_bypass_prompt and not provider.official:
+            block[SKIP_BYPASS_PROMPT_KEY] = True
+        elif block.get(SKIP_BYPASS_PROMPT_KEY) is True:
+            block.pop(SKIP_BYPASS_PROMPT_KEY, None)
+
+        if block != original:
+            if block:
+                settings[PERMISSIONS_KEY] = block
+            else:
+                settings.pop(PERMISSIONS_KEY, None)
+
+        if mode == BYPASS_MODE and block.get(DISABLE_BYPASS_KEY) == "disable":
+            result.warnings.append(
+                f"settings.json sets {DISABLE_BYPASS_KEY}, so Claude Code will refuse to "
+                "start in bypass mode."
+            )
+
+        self._apply_project_mcp(settings, provider)
+
+    @staticmethod
+    def _apply_project_mcp(settings: dict, provider: Provider) -> None:
+        if provider.all_project_mcp and not provider.official:
+            settings[PROJECT_MCP_KEY] = True
+        elif settings.get(PROJECT_MCP_KEY) is True:
+            settings.pop(PROJECT_MCP_KEY, None)
 
     def import_live(self) -> Provider | None:
         settings = self._read_settings()
@@ -107,6 +198,8 @@ class ClaudeAdapter(Adapter):
             for k, v in env.items()
             if k not in MANAGED_KEYS
         }
+        permissions = settings.get(PERMISSIONS_KEY)
+        mode = permissions.get(DEFAULT_MODE_KEY) if isinstance(permissions, dict) else None
         return Provider(
             app=APP_CLAUDE,
             name="Imported",
@@ -117,6 +210,12 @@ class ClaudeAdapter(Adapter):
             model=str(env.get(MODEL_KEY, "")),
             small_fast_model=str(env.get(SMALL_FAST_MODEL_KEY, "")),
             extra=extra,
+            bypass_permissions=mode == BYPASS_MODE,
+            skip_bypass_prompt=(
+                isinstance(permissions, dict) and permissions.get(SKIP_BYPASS_PROMPT_KEY) is True
+            ),
+            accept_edits=mode == ACCEPT_EDITS_MODE,
+            all_project_mcp=settings.get(PROJECT_MCP_KEY) is True,
         )
 
     def health_target(self, provider: Provider) -> tuple[str, dict[str, str]] | None:

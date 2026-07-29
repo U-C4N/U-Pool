@@ -2,10 +2,29 @@
 
 import { useMemo, useState } from "react";
 import { type ProviderPreset, presetsFor } from "@/lib/presets";
-import type { AppId, ProviderDetail } from "@/lib/types";
+import type { AppId, ProviderDetail, ProviderToggles } from "@/lib/types";
 import { PresetIcon } from "./BrandMarks";
 import { ArrowLeftIcon, ChevronIcon, PlusIcon, XIcon } from "./icons";
-import { Button, Field, IconButton, SecretInput, Select, TextInput, Tip, cx } from "./ui";
+import {
+  Button,
+  Checkbox,
+  Field,
+  IconButton,
+  SecretInput,
+  Select,
+  TextInput,
+  Tip,
+  cx,
+} from "./ui";
+
+/** The config key a checkbox owns, so the hint says exactly what gets written. */
+function Key({ children }: { children: React.ReactNode }) {
+  return (
+    <code className="rounded-[5px] bg-black/[0.05] px-1 py-px font-mono text-[11px] text-[var(--color-secondary-label)]">
+      {children}
+    </code>
+  );
+}
 
 type Draft = Omit<ProviderDetail, "created_at" | "updated_at">;
 
@@ -24,7 +43,25 @@ function blank(app: AppId): Draft {
     wire_api: "responses",
     env_key: "OPENAI_API_KEY",
     extra: {},
+    bypass_permissions: false,
+    skip_bypass_prompt: false,
+    accept_edits: false,
+    all_project_mcp: false,
+    bypass_approvals: false,
+    web_search: false,
     official: false,
+  };
+}
+
+/** Toggles are the user's choice, not the template's, so they ride along. */
+function carriedOver(draft: Draft): ProviderToggles {
+  return {
+    bypass_permissions: draft.bypass_permissions,
+    skip_bypass_prompt: draft.skip_bypass_prompt,
+    accept_edits: draft.accept_edits,
+    all_project_mcp: draft.all_project_mcp,
+    bypass_approvals: draft.bypass_approvals,
+    web_search: draft.web_search,
   };
 }
 
@@ -143,8 +180,12 @@ export function ProviderForm({
     setPresetId(preset.id);
     setError(null);
     setExtra(Object.entries(preset.extra ?? {}));
-    // Keep a key the user already typed when hopping between presets.
-    setDraft((current) => draftFromPreset(app, preset, current.api_key));
+    // Keep what the user typed or ticked when hopping between presets - a template
+    // only supplies the endpoint, never the permission switches.
+    setDraft((current) => ({
+      ...draftFromPreset(app, preset, current.api_key),
+      ...carriedOver(current),
+    }));
   };
 
   const extraMap = useMemo(() => {
@@ -154,6 +195,97 @@ export function ProviderForm({
     }
     return map;
   }, [extra]);
+
+  const wideOpen = app === "claude" ? draft.bypass_permissions : draft.bypass_approvals;
+
+  const toggles =
+    app === "claude" ? (
+      <>
+        <Checkbox
+          danger
+          label="Bypass permission prompts"
+          hint={
+            <>
+              <Key>permissions.defaultMode: &quot;bypassPermissions&quot;</Key> — what{" "}
+              <Key>--dangerously-skip-permissions</Key> does, made permanent.
+            </>
+          }
+          checked={draft.bypass_permissions}
+          onChange={(value) =>
+            // The companion box only means anything in bypass mode, so it does not
+            // stay ticked-but-dead when bypass goes away.
+            setDraft((current) => ({
+              ...current,
+              bypass_permissions: value,
+              skip_bypass_prompt: value && current.skip_bypass_prompt,
+            }))
+          }
+        />
+        <Checkbox
+          danger
+          label="Skip the bypass warning screen"
+          hint={
+            <>
+              <Key>permissions.skipDangerousModePermissionPrompt</Key> — drops the one-off
+              accept-the-risk dialog that bypass mode opens with. Needs bypass above.
+            </>
+          }
+          checked={draft.skip_bypass_prompt}
+          disabled={!draft.bypass_permissions}
+          onChange={(value) => set("skip_bypass_prompt", value)}
+        />
+        <Checkbox
+          label="Auto-accept file edits"
+          hint={
+            <>
+              <Key>permissions.defaultMode: &quot;acceptEdits&quot;</Key> — edits go through, commands
+              still ask. Ignored while bypass is on.
+            </>
+          }
+          checked={draft.accept_edits}
+          disabled={draft.bypass_permissions}
+          onChange={(value) => set("accept_edits", value)}
+        />
+        <Checkbox
+          label="Trust MCP servers from the project"
+          hint={
+            <>
+              <Key>enableAllProjectMcpServers</Key> — approves every server a repository&apos;s
+              .mcp.json declares.
+            </>
+          }
+          checked={draft.all_project_mcp}
+          onChange={(value) => set("all_project_mcp", value)}
+        />
+      </>
+    ) : (
+      <>
+        <Checkbox
+          danger
+          label="Bypass approvals & sandbox"
+          hint={
+            <>
+              <Key>approval_policy = &quot;never&quot;</Key> plus{" "}
+              <Key>sandbox_mode = &quot;danger-full-access&quot;</Key> — the pair{" "}
+              <Key>--dangerously-bypass-approvals-and-sandbox</Key> sets.
+            </>
+          }
+          checked={draft.bypass_approvals}
+          onChange={(value) => set("bypass_approvals", value)}
+        />
+        <Checkbox
+          label="Live web search"
+          hint={
+            <>
+              <Key>web_search = &quot;live&quot;</Key> at the root of config.toml. The{" "}
+              <Key>[tools]</Key> boolean is a no-op in Codex, so it is not used.
+            </>
+          }
+          checked={draft.web_search}
+          onChange={(value) => set("web_search", value)}
+        />
+      </>
+    );
 
   const submit = () => {
     if (!draft.name.trim()) return setError("Give the provider a name.");
@@ -331,8 +463,8 @@ export function ProviderForm({
             Advanced options
           </button>
           <p className="mt-1 pl-5.5 text-xs text-zinc-400">
-            Model override, authentication style and pass-through fields. Defaults are fine for most
-            providers.
+            Model override, authentication style, permission switches and pass-through fields.
+            Defaults are fine for most providers.
           </p>
 
           {advanced ? (
@@ -393,6 +525,26 @@ export function ProviderForm({
                     onChange={(event) => set("env_key", event.target.value)}
                   />
                 </Field>
+              )}
+
+              {locked ? null : (
+                <div>
+                  <p className="mb-1.5 text-sm font-medium text-zinc-700">
+                    {app === "claude" ? "Permissions & MCP" : "Approvals & sandbox"}
+                  </p>
+                  <p className="mb-2 text-xs text-zinc-400">
+                    {app === "claude"
+                      ? "Each box owns one key in settings.json while it is ticked, and takes it back out when you untick it. Your allow/deny rules are never touched."
+                      : "Codex-wide keys written next to model_provider in config.toml, removed again when you untick the box."}
+                  </p>
+                  <div className="space-y-0.5">{toggles}</div>
+                  {wideOpen ? (
+                    <p className="mt-2 rounded-[14px] bg-red-500/[0.07] px-3.5 py-2.5 text-[12px] leading-relaxed text-red-700">
+                      Wide open: while this provider is in use, {appLabel} runs commands and edits
+                      files without asking. Keep it for endpoints and machines you trust.
+                    </p>
+                  ) : null}
+                </div>
               )}
 
               <div>

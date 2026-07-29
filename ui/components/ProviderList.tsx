@@ -35,6 +35,17 @@ function HealthBadge({ result }: { result: HealthResult }) {
   );
 }
 
+const BYPASS_HINT: Record<ProviderSummary["app"], string> = {
+  claude: "permission prompts are bypassed for this provider",
+  codex: "approvals and the sandbox are bypassed for this provider",
+};
+
+/** A provider that has turned every confirmation off for its target CLI. */
+function isWideOpen(provider: ProviderSummary): boolean {
+  if (provider.official) return false;
+  return provider.app === "claude" ? provider.bypass_permissions : provider.bypass_approvals;
+}
+
 function looksOpenAI(provider: ProviderSummary): boolean {
   const hay = `${provider.name} ${provider.website} ${provider.base_url}`.toLowerCase();
   return (
@@ -145,6 +156,18 @@ function ProviderRow({
           {provider.official ? (
             <span className="shrink-0 rounded-full bg-white/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--color-secondary-label)]">
               Official
+            </span>
+          ) : null}
+          {isWideOpen(provider) ? (
+            <span
+              // No pointer-events-auto: the row content stays inert so a click
+              // anywhere on the row still switches provider. The sr-only text carries
+              // the meaning for anyone the tooltip does not reach.
+              title={BYPASS_HINT[provider.app]}
+              className="shrink-0 rounded-full bg-red-500/[0.12] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-red-700"
+            >
+              Bypass
+              <span className="sr-only"> — {BYPASS_HINT[provider.app]}</span>
             </span>
           ) : null}
           {provider.note ? (

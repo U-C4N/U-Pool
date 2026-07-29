@@ -48,6 +48,24 @@ BOOL_EXTRA_KEYS = frozenset(
     }
 )
 
+# Root-level knobs behind the advanced checkboxes. Written while the box is
+# ticked, removed again when it is not - but only when the value on disk is the
+# one U-Pool would have written, so a hand-picked policy is never overruled.
+#
+# Together these two are exactly what ``--dangerously-bypass-approvals-and-sandbox``
+# sets. They are Codex-wide keys: inside ``[model_providers.<slug>]`` Codex would
+# never see them.
+APPROVAL_POLICY_KEY = "approval_policy"
+SANDBOX_MODE_KEY = "sandbox_mode"
+BYPASS_APPROVAL_POLICY = "never"
+BYPASS_SANDBOX_MODE = "danger-full-access"
+# Note the shape: ``[tools] web_search = true`` parses but is discarded by Codex.
+# The switch that actually works is this top-level string.
+WEB_SEARCH_KEY = "web_search"
+WEB_SEARCH_LIVE = "live"
+# Newer permission profiles supersede sandbox_mode and cannot be combined with it.
+PERMISSIONS_PROFILE_KEY = "default_permissions"
+
 
 def _coerce_extra_value(key: str, value: str):
     """TOML prefers real booleans for known flags; everything else stays a string."""
@@ -133,6 +151,8 @@ class CodexAdapter(Adapter):
                 else:
                     doc[key] = _coerce_extra_value(key, value)
 
+        self._apply_toggles(doc, provider, result)
+
         if len(providers) == 0:
             doc.pop(PROVIDERS_KEY, None)
 
@@ -145,6 +165,45 @@ class CodexAdapter(Adapter):
 
         result.warnings.extend(self._apply_auth(provider, result))
         return result
+
+    def _apply_toggles(self, doc: TOMLDocument, provider: Provider, result: ApplyResult) -> None:
+        """Project the advanced checkboxes onto the root of config.toml."""
+        bypass = provider.bypass_approvals and not provider.official
+        if bypass:
+            doc[APPROVAL_POLICY_KEY] = BYPASS_APPROVAL_POLICY
+            doc[SANDBOX_MODE_KEY] = BYPASS_SANDBOX_MODE
+        elif self._bypass_pair_present(doc):
+            # Both halves together are U-Pool's own fingerprint - and the only shape
+            # import_live reads back as "bypass on". A lone hand-written
+            # sandbox_mode = "danger-full-access" is somebody else's setting: leave it.
+            doc.pop(APPROVAL_POLICY_KEY, None)
+            doc.pop(SANDBOX_MODE_KEY, None)
+        self._root_flag(
+            doc,
+            WEB_SEARCH_KEY,
+            WEB_SEARCH_LIVE,
+            provider.web_search and not provider.official,
+        )
+        if bypass and PERMISSIONS_PROFILE_KEY in doc:
+            result.warnings.append(
+                f"config.toml already sets {PERMISSIONS_PROFILE_KEY}, which replaces "
+                f"{SANDBOX_MODE_KEY} - Codex will not accept both."
+            )
+
+    @staticmethod
+    def _bypass_pair_present(doc: TOMLDocument) -> bool:
+        return (
+            doc.get(APPROVAL_POLICY_KEY) == BYPASS_APPROVAL_POLICY
+            and doc.get(SANDBOX_MODE_KEY) == BYPASS_SANDBOX_MODE
+        )
+
+    @staticmethod
+    def _root_flag(doc: TOMLDocument, key: str, value: str, enabled: bool) -> None:
+        """Own ``key`` while the box is ticked; give it back when it is not."""
+        if enabled:
+            doc[key] = value
+        elif doc.get(key) == value:
+            doc.pop(key, None)
 
     def _apply_auth(self, provider: Provider, result: ApplyResult) -> list[str]:
         """Write the key into auth.json, preserving any ChatGPT login tokens."""
@@ -208,6 +267,8 @@ class CodexAdapter(Adapter):
             wire_api=wire_api if wire_api in (WIRE_RESPONSES, WIRE_CHAT) else WIRE_RESPONSES,
             env_key=env_key,
             extra=extra,
+            bypass_approvals=self._bypass_pair_present(doc),
+            web_search=doc.get(WEB_SEARCH_KEY) == WEB_SEARCH_LIVE,
         )
 
     def health_target(self, provider: Provider) -> tuple[str, dict[str, str]] | None:

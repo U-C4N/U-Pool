@@ -27,6 +27,18 @@ AUTH_API_KEY = "api_key"
 WIRE_RESPONSES = "responses"
 WIRE_CHAT = "chat"
 
+# Fields the UI sends as JSON booleans. A config.json hand-edited (or written by
+# an older build) can hold "true" / 1 instead, so they are coerced on load.
+BOOL_FIELDS = (
+    "official",
+    "bypass_permissions",
+    "skip_bypass_prompt",
+    "accept_edits",
+    "all_project_mcp",
+    "bypass_approvals",
+    "web_search",
+)
+
 _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 
 
@@ -62,6 +74,17 @@ class Provider:
     # Free-form escape hatch: extra env vars (Claude) / extra provider keys (Codex).
     extra: dict[str, str] = field(default_factory=dict)
 
+    # Advanced toggles - one checkbox each in the form. Every flag maps onto a
+    # single key in the target CLI's own config file; the adapters do the
+    # projection. They live per provider on purpose: a scratch relay can run wide
+    # open while the account you care about keeps every prompt.
+    bypass_permissions: bool = False  # Claude: permissions.defaultMode
+    skip_bypass_prompt: bool = False  # Claude: permissions.skipDangerousModePermissionPrompt
+    accept_edits: bool = False  # Claude: permissions.defaultMode
+    all_project_mcp: bool = False  # Claude: enableAllProjectMcpServers
+    bypass_approvals: bool = False  # Codex: approval_policy + sandbox_mode
+    web_search: bool = False  # Codex: web_search = "live"
+
     # An "official" provider means: hand control back to the vendor's own login
     # flow by removing everything U-Pool manages from the live config.
     official: bool = False
@@ -89,7 +112,17 @@ class Provider:
         clean.setdefault("id", uuid.uuid4().hex)
         extra = clean.get("extra") or {}
         clean["extra"] = {str(k): str(v) for k, v in dict(extra).items()}
+        for key in BOOL_FIELDS:
+            if key in clean:
+                clean[key] = as_bool(clean[key])
         return cls(**clean)
+
+
+def as_bool(value: Any) -> bool:
+    """Truthiness with the strings a JSON/TOML round trip can produce."""
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
 
 
 def mask_secret(value: str) -> str:

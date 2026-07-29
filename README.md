@@ -10,7 +10,7 @@ Python backend · Next.js UI · native OS webview — no Electron, no Node at ru
   <a href="https://github.com/U-C4N/U-Pool/stargazers"><img src="https://img.shields.io/github/stars/U-C4N/U-Pool?style=for-the-badge&logo=github&color=007aff" alt="Stars" /></a>
   <a href="https://github.com/U-C4N/U-Pool/network/members"><img src="https://img.shields.io/github/forks/U-C4N/U-Pool?style=for-the-badge&logo=github&color=0a84ff" alt="Forks" /></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+" />
-  <img src="https://img.shields.io/badge/version-0.3.0-informational?style=for-the-badge" alt="Version 0.3.0" />
+  <img src="https://img.shields.io/badge/version-0.4.0-informational?style=for-the-badge" alt="Version 0.4.0" />
 </p>
 
 ## Screenshot
@@ -41,6 +41,8 @@ Switching between Anthropic, OpenRouter, DeepSeek, Azure, xAI, and custom relays
 | **Reachability probe** | Plain `GET /models` — latency only, no completions, no token cost |
 | **Presets** | Yunwu, DeepSeek, Kimi, OpenRouter, MiniMax, Z.ai, Azure, xAI, Custom, and more |
 | **Official mode** | Hand control back to vendor login by clearing U-Pool-managed keys |
+| **Permission switches** | Per-provider checkboxes for bypass mode, auto-accept edits, project MCP trust, Codex approvals/sandbox and live web search |
+| **Launch at sign-in** | Windows on/off switch — one `HKCU\...\Run` entry, removed again when you turn it off |
 
 ## How it works
 
@@ -49,8 +51,31 @@ Switching between Anthropic, OpenRouter, DeepSeek, Azure, xAI, and custom relays
 | App | File | What U-Pool writes |
 | --- | --- | --- |
 | Claude Code | `~/.claude/settings.json` | `env` block: base URL, auth token / API key, models, extras |
+| Claude Code | `~/.claude/settings.json` | Only while a checkbox is ticked: `permissions.defaultMode`, `permissions.skipDangerousModePermissionPrompt`, `enableAllProjectMcpServers` |
 | Codex | `~/.codex/config.toml` | `model_provider`, `model`, `[model_providers.<slug>]` |
+| Codex | `~/.codex/config.toml` | Only while a checkbox is ticked: `approval_policy`, `sandbox_mode`, `web_search` |
 | Codex | `~/.codex/auth.json` | `OPENAI_API_KEY` only — ChatGPT login tokens are preserved |
+
+### Advanced options
+
+Each checkbox in **Add provider → Advanced options** owns exactly one key while it is ticked, and takes that key back out when you untick it. Your own `permissions.allow` / `deny` rules, a hand-picked `approval_policy`, and any `defaultMode` U-Pool does not write (`plan`, `auto`, …) are never touched.
+
+| Checkbox | App | Written |
+| --- | --- | --- |
+| Bypass permission prompts | Claude Code | `permissions.defaultMode = "bypassPermissions"` — the settings form of `--dangerously-skip-permissions` |
+| Skip the bypass warning screen | Claude Code | `permissions.skipDangerousModePermissionPrompt = true` |
+| Auto-accept file edits | Claude Code | `permissions.defaultMode = "acceptEdits"` |
+| Trust MCP servers from the project | Claude Code | `enableAllProjectMcpServers = true` |
+| Bypass approvals & sandbox | Codex | `approval_policy = "never"` + `sandbox_mode = "danger-full-access"` — the pair `--dangerously-bypass-approvals-and-sandbox` sets |
+| Live web search | Codex | `web_search = "live"` at the root (the `[tools]` boolean form is a no-op in Codex) |
+
+A provider with bypass on is badged **Bypass** in the list, so you can see it without opening the form. Switching to the official entry clears all of it.
+
+### Launch at sign-in (Windows)
+
+**Settings → Startup** writes one `REG_SZ` value named `U-Pool` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` — no admin rights, no scheduled task, no shortcut. The remembered choice lives in `~/.u-pool/settings.json`, and the entry is re-pointed at the current build on every launch so a moved bundle cannot leave a dead command behind.
+
+If you switch U-Pool off under **Task Manager → Startup apps**, Windows keeps that decision: U-Pool reports "switched off by Windows" and offers a shortcut to the Windows page instead of quietly overriding you.
 
 ```
 ┌───────────────────────────────────────────────┐

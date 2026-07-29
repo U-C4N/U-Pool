@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "@/components/Header";
 import { ProviderForm } from "@/components/ProviderForm";
 import { ProviderList, type RowHandlers } from "@/components/ProviderList";
@@ -12,6 +12,7 @@ import type {
   AppId,
   AppInfo,
   AppPaths,
+  AppSettings,
   AppState,
   HealthResult,
   ProviderDetail,
@@ -37,6 +38,10 @@ export default function Page() {
   const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ProviderSummary | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [savingSettings, setSavingSettings] = useState(false);
+  // Generation counter so a slow settings read cannot land on top of a newer write.
+  const settingsRead = useRef(0);
   const [paths, setPaths] = useState<AppPaths | null>(null);
   const [meta, setMeta] = useState({ version: "", platform: "" });
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -60,6 +65,7 @@ export default function Page() {
         setStates(data.state);
         setApp(data.apps[0]?.id ?? "claude");
         setMeta({ version: data.version, platform: data.platform });
+        setSettings(data.settings);
         // Checked only once the bridge has resolved, otherwise pywebview's
         // late API injection would look like a missing backend.
         setMockBridge(isMockBridge());
@@ -196,6 +202,44 @@ export default function Page() {
     [push],
   );
 
+  const handleToggleStartup = useCallback(
+    async (enabled: boolean) => {
+      setSavingSettings(true);
+      // Writing wins over any read still in flight, whatever order they resolve in.
+      settingsRead.current += 1;
+      try {
+        const next = await backend.setLaunchAtStartup(enabled);
+        setSettings(next);
+        if (next.autostart_blocked) {
+          push("error", "Windows is ignoring the startup entry", next.autostart_detail);
+        } else if (next.launch_at_startup === enabled) {
+          push("success", enabled ? "U-Pool will open when you sign in" : "Startup entry removed");
+        } else {
+          push("error", "The startup entry did not change", next.autostart_detail);
+        }
+      } catch (error) {
+        push("error", message(error));
+      } finally {
+        setSavingSettings(false);
+      }
+    },
+    [push],
+  );
+
+  const openStartupSettings = useCallback(() => {
+    backend.openStartupSettings().catch((error) => push("error", message(error)));
+  }, [push]);
+
+  const openSettings = useCallback(() => {
+    setSettingsOpen(true);
+    // Windows can have switched the startup entry off since the last look.
+    const token = (settingsRead.current += 1);
+    backend
+      .getSettings()
+      .then((next) => token === settingsRead.current && setSettings(next))
+      .catch(() => undefined);
+  }, []);
+
   const handlers: RowHandlers = {
     onSwitch: handleSwitch,
     onEdit: handleEdit,
@@ -229,7 +273,7 @@ export default function Page() {
         onAdd={() => setView({ mode: "form", provider: null })}
         onTestAll={handleTestAll}
         onOpenFolder={() => state.files[0] && openPath(state.files[0])}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={openSettings}
         testing={testing}
       />
 
@@ -291,7 +335,11 @@ export default function Page() {
           platform={meta.platform}
           paths={paths}
           liveFiles={state.files}
+          settings={settings}
+          savingSettings={savingSettings}
           onOpen={openPath}
+          onToggleStartup={handleToggleStartup}
+          onOpenStartupSettings={openStartupSettings}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}

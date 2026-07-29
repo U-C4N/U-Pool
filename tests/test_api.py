@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 
+from upool import autostart, settings
 from upool.api import Api
 from upool.models import APP_CLAUDE, APP_CODEX
 
@@ -79,7 +82,7 @@ def test_switch_surfaces_adapter_warnings():
 
 def test_read_live_config_lists_every_managed_file():
     files = Api().read_live_config(APP_CODEX)["data"]
-    assert [f["path"].split("/")[-1] for f in files] == ["config.toml", "auth.json"]
+    assert [Path(f["path"]).name for f in files] == ["config.toml", "auth.json"]
 
 
 def test_test_provider_skips_official_entries():
@@ -92,3 +95,62 @@ def test_test_provider_skips_official_entries():
 
 def test_open_external_rejects_non_http_urls():
     assert Api().open_external("file:///etc/passwd")["ok"] is False
+
+
+def test_advanced_toggles_round_trip_through_save():
+    api = Api()
+    created = api.save_provider(
+        draft(bypass_permissions=True, skip_bypass_prompt=True, all_project_mcp=True)
+    )["data"]["id"]
+
+    detail = api.get_provider(APP_CLAUDE, created)["data"]
+    assert detail["bypass_permissions"] is True
+    assert detail["skip_bypass_prompt"] is True
+    assert detail["all_project_mcp"] is True
+    assert detail["accept_edits"] is False
+
+    # The list summary carries them too, so a row can be badged as wide open.
+    row = [p for p in api.list_providers(APP_CLAUDE)["data"]["providers"] if p["id"] == created][0]
+    assert row["bypass_permissions"] is True
+
+
+def test_a_toggle_sent_as_a_string_is_still_a_boolean():
+    api = Api()
+    created = api.save_provider(draft(bypass_permissions="true"))["data"]["id"]
+    assert api.get_provider(APP_CLAUDE, created)["data"]["bypass_permissions"] is True
+
+
+def test_switching_to_a_wide_open_provider_writes_the_permission_mode(sandbox):
+    api = Api()
+    created = api.save_provider(draft(bypass_permissions=True))["data"]["id"]
+    api.switch_provider(APP_CLAUDE, created)
+    data = json.loads((sandbox / ".claude" / "settings.json").read_text())
+    assert data["permissions"]["defaultMode"] == "bypassPermissions"
+
+
+def test_settings_expose_the_startup_switch():
+    data = Api().get_settings()["data"]
+    assert set(data) == {
+        "launch_at_startup",
+        "autostart_supported",
+        "autostart_blocked",
+        "autostart_command",
+        "autostart_detail",
+    }
+    assert data["launch_at_startup"] is False
+    assert data["autostart_supported"] is (sys.platform == "win32")
+
+
+def test_bootstrap_carries_the_settings():
+    assert Api().bootstrap()["data"]["settings"]["launch_at_startup"] is False
+
+
+def test_launch_at_startup_round_trips():
+    api = Api()
+    if not autostart.supported():
+        assert api.set_launch_at_startup(True)["ok"] is False
+        return
+    assert api.set_launch_at_startup(True)["data"]["launch_at_startup"] is True
+    assert settings.load()["launch_at_startup"] is True
+    assert api.set_launch_at_startup(False)["data"]["launch_at_startup"] is False
+    assert settings.load()["launch_at_startup"] is False

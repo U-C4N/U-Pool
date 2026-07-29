@@ -4,6 +4,7 @@ import { mockApi } from "./mock";
 import type {
   AppId,
   AppPaths,
+  AppSettings,
   AppState,
   Bootstrap,
   HealthResult,
@@ -89,4 +90,8 @@ export const backend = {
   openPath: (target: string) => call<string>("open_path", target),
   openExternal: (url: string) => call<string>("open_external", url),
   appPaths: () => call<AppPaths>("app_paths"),
+  getSettings: () => call<AppSettings>("get_settings"),
+  setLaunchAtStartup: (enabled: boolean) =>
+    call<AppSettings>("set_launch_at_startup", enabled),
+  openStartupSettings: () => call<string>("open_startup_settings"),
 };

@@ -2,7 +2,7 @@
 
 /** Small shared primitives: buttons, form fields, modal shell. */
 import { useEffect, useId, useRef, useState } from "react";
-import { EyeIcon, EyeOffIcon, XIcon } from "./icons";
+import { CheckIcon, EyeIcon, EyeOffIcon, XIcon } from "./icons";
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
@@ -122,6 +122,124 @@ export function SecretInput(props: React.InputHTMLAttributes<HTMLInputElement>) 
         {revealed ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
       </button>
     </div>
+  );
+}
+
+/** Checkbox row: the label is the hit target, the hint explains the cost. */
+export function Checkbox({
+  label,
+  hint,
+  checked,
+  disabled,
+  danger,
+  onChange,
+}: {
+  label: string;
+  hint?: React.ReactNode;
+  checked: boolean;
+  disabled?: boolean;
+  danger?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  // The hint names the config key this box writes: description, not label, or a
+  // screen reader announces a 20-word name for a checkbox.
+  const nameId = useId();
+  const hintId = useId();
+  return (
+    <label
+      className={cx(
+        "flex items-start gap-2.5 rounded-[14px] px-2.5 py-2 transition",
+        // Both cursor utilities set the same property, so only one may be emitted.
+        disabled ? "cursor-not-allowed opacity-45" : "cursor-pointer hover:bg-white/45",
+        checked && danger && !disabled && "bg-red-500/[0.07]",
+      )}
+    >
+      <span className="relative mt-[3px] grid h-[17px] w-[17px] shrink-0 place-items-center">
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          aria-labelledby={nameId}
+          aria-describedby={hint ? hintId : undefined}
+          onChange={(event) => onChange(event.target.checked)}
+          className={cx(
+            "peer h-full w-full appearance-none rounded-[5px] bg-white/70 transition",
+            "shadow-[inset_0_0_0_1px_rgba(15,23,42,0.18)] checked:shadow-none",
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500",
+            disabled ? "cursor-not-allowed" : "cursor-pointer",
+            danger ? "checked:bg-red-500" : "checked:bg-brand-600",
+          )}
+        />
+        <CheckIcon
+          strokeWidth={3.2}
+          className="pointer-events-none absolute h-3 w-3 text-white opacity-0 peer-checked:opacity-100"
+        />
+      </span>
+      <span className="min-w-0">
+        <span
+          id={nameId}
+          className={cx(
+            "block text-[13px] font-medium tracking-[-0.01em]",
+            danger && checked && !disabled ? "text-red-700" : "text-[var(--color-label)]",
+          )}
+        >
+          {label}
+        </span>
+        {hint ? (
+          <span
+            id={hintId}
+            className="mt-0.5 block text-[12px] leading-relaxed text-[var(--color-tertiary-label)]"
+          >
+            {hint}
+          </span>
+        ) : null}
+      </span>
+    </label>
+  );
+}
+
+/** iOS-style switch for a single app-level preference. */
+export function Switch({
+  label,
+  checked,
+  disabled,
+  busy,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  busy?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      // Only a permanently unavailable switch is `disabled`. An in-flight write uses
+      // aria-busy instead, because disabling a focused button drops keyboard focus.
+      disabled={disabled}
+      aria-busy={busy || undefined}
+      onClick={() => !busy && onChange(!checked)}
+      className={cx(
+        "relative h-[26px] w-[44px] shrink-0 rounded-full transition-colors duration-200",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500",
+        checked ? "bg-brand-600" : "bg-black/[0.14]",
+        disabled && "cursor-not-allowed opacity-45",
+        busy && "cursor-progress opacity-70",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cx(
+          "absolute top-[3px] h-5 w-5 rounded-full bg-white shadow-[0_2px_6px_-1px_rgba(15,23,42,0.45)] transition-[left] duration-200",
+          checked ? "left-[21px]" : "left-[3px]",
+          busy && "animate-pulse",
+        )}
+      />
+    </button>
   );
 }
 

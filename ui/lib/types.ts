@@ -8,8 +8,27 @@ export interface AppInfo {
   label: string;
 }
 
+/**
+ * Advanced toggles. Each one owns exactly one key in the target CLI's own
+ * config file while it is on, and gives it back when it goes off.
+ */
+export interface ProviderToggles {
+  /** Claude: permissions.defaultMode = "bypassPermissions". */
+  bypass_permissions: boolean;
+  /** Claude: permissions.skipDangerousModePermissionPrompt = true. */
+  skip_bypass_prompt: boolean;
+  /** Claude: permissions.defaultMode = "acceptEdits". */
+  accept_edits: boolean;
+  /** Claude: enableAllProjectMcpServers = true. */
+  all_project_mcp: boolean;
+  /** Codex: approval_policy = "never" + sandbox_mode = "danger-full-access". */
+  bypass_approvals: boolean;
+  /** Codex: web_search = "live". */
+  web_search: boolean;
+}
+
 /** A provider as it comes back from list endpoints: no raw API key. */
-export interface ProviderSummary {
+export interface ProviderSummary extends ProviderToggles {
   id: string;
   app: AppId;
   name: string;
@@ -41,11 +60,23 @@ export interface AppState {
   files: string[];
 }
 
+/** Preferences that belong to U-Pool itself rather than to a provider. */
+export interface AppSettings {
+  /** What the OS actually reports, not just what was asked for. */
+  launch_at_startup: boolean;
+  autostart_supported: boolean;
+  /** Registered, but switched off in Task Manager > Startup apps. */
+  autostart_blocked: boolean;
+  autostart_command: string;
+  autostart_detail: string;
+}
+
 export interface Bootstrap {
   version: string;
   platform: string;
   apps: AppInfo[];
   state: Record<AppId, AppState>;
+  settings: AppSettings;
 }
 
 export interface SwitchResult {
@@ -71,4 +102,5 @@ export interface AppPaths {
   home: string;
   config: string;
   backups: string;
+  settings: string;
 }

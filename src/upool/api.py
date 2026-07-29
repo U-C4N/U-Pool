@@ -17,11 +17,12 @@ import traceback
 from pathlib import Path
 from typing import Any, Callable
 
-from . import adapters, health, paths
-from .models import Provider, UPoolError, mask_secret
+from . import __version__, adapters, autostart, health, paths, settings
+from .models import Provider, UPoolError, as_bool, mask_secret
 from .store import Store
 
-APP_VERSION = "0.3.0"
+# One version string for the package, the window title bar and the UI badge.
+APP_VERSION = __version__
 
 
 def endpoint(func: Callable) -> Callable:
@@ -68,6 +69,7 @@ class Api:
             "platform": sys.platform,
             "apps": apps,
             "state": {app["id"]: self._app_state(app["id"]) for app in apps},
+            "settings": self._settings(),
         }
 
     def _app_state(self, app: str) -> dict[str, Any]:
@@ -183,7 +185,51 @@ class Api:
             "home": str(paths.app_home()),
             "config": str(paths.config_file()),
             "backups": str(paths.backup_dir()),
+            "settings": str(paths.settings_file()),
         }
+
+    # --------------------------------------------------------------- preferences
+
+    def _settings(self) -> dict[str, Any]:
+        """App preferences, with the OS as the authority on the startup entry."""
+        stored = settings.load()
+        entry = autostart.state()
+        live = entry["enabled"] if entry["supported"] else stored["launch_at_startup"]
+        return {
+            "launch_at_startup": bool(live),
+            "autostart_supported": bool(entry["supported"]),
+            "autostart_blocked": bool(entry["blocked"]),
+            "autostart_command": str(entry["command"]),
+            "autostart_detail": str(entry["detail"]),
+        }
+
+    @endpoint
+    def get_settings(self) -> dict[str, Any]:
+        return self._settings()
+
+    @endpoint
+    def set_launch_at_startup(self, enabled: bool) -> dict[str, Any]:
+        """Add or remove the OS sign-in entry, and remember the choice."""
+        wanted = as_bool(enabled)
+        autostart.apply(wanted)
+        try:
+            settings.update({"launch_at_startup": wanted})
+        except OSError as exc:
+            # The OS entry already changed, so say which half failed rather than
+            # letting a bare errno suggest nothing happened.
+            raise UPoolError(
+                f"The startup entry was {'added' if wanted else 'removed'}, but the choice "
+                f"could not be saved to {paths.settings_file()}: {exc}"
+            ) from exc
+        return self._settings()
+
+    @endpoint
+    def open_startup_settings(self) -> str:
+        """Open the Windows page that owns the final say on startup apps."""
+        if sys.platform != "win32":
+            raise UPoolError(autostart.UNSUPPORTED_NOTE)
+        os.startfile(autostart.SETTINGS_URI)  # noqa: S606 - intentional shell-open
+        return autostart.SETTINGS_URI
 
     @endpoint
     def quit(self) -> bool:
