@@ -15,6 +15,7 @@ export function Header({
   onOpenFolder,
   onOpenSettings,
   testing,
+  updateAvailable = false,
 }: {
   apps: AppInfo[];
   activeApp: AppId;
@@ -25,6 +26,8 @@ export function Header({
   onOpenFolder: () => void;
   onOpenSettings: () => void;
   testing: boolean;
+  /** Puts a dot on the gear, since the offer itself lives inside Settings. */
+  updateAvailable?: boolean;
 }) {
   return (
     <header className="upool-header z-30">
@@ -89,9 +92,20 @@ export function Header({
           <IconButton label="Open config folder" onClick={onOpenFolder}>
             <FolderIcon className="h-[18px] w-[18px]" />
           </IconButton>
-          <IconButton label="Settings" onClick={onOpenSettings}>
-            <GearIcon className="h-[18px] w-[18px]" />
-          </IconButton>
+          <span className="relative inline-flex">
+            <IconButton
+              label={updateAvailable ? "Settings — an update is available" : "Settings"}
+              onClick={onOpenSettings}
+            >
+              <GearIcon className="h-[18px] w-[18px]" />
+            </IconButton>
+            {updateAvailable ? (
+              <span
+                aria-hidden
+                className="animate-attention pointer-events-none absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#FF9500]"
+              />
+            ) : null}
+          </span>
           <button
             type="button"
             onClick={onAdd}

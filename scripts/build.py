@@ -6,17 +6,25 @@ Produces ``dist/U-Pool/U-Pool.exe`` using PyInstaller in *onedir* mode. Onefile
 is deliberately avoided: it unpacks the whole bundle into a temp directory on
 every launch, which costs about a second of startup - the exact thing this app
 is supposed to be good at.
+
+It also zips the bundle as ``dist/U-Pool-<version>-win64.zip`` and prints its
+SHA-256. That archive is what the in-app updater downloads, so it has to be
+attached to the GitHub release as an asset - and the name has to keep matching
+``upool.release.ASSET_RE``.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+from upool import __version__  # noqa: E402 - needs the path above
 UI_DIR = ROOT / "ui"
 UI_OUT = UI_DIR / "out"
 DIST = ROOT / "dist"
@@ -72,6 +80,40 @@ def build_app() -> None:
     run(command, cwd=ROOT)
 
 
+def smoke_test() -> None:
+    """Start the built exe once before anyone downloads it.
+
+    ``--version`` exits before the webview is touched, so this is a cheap check
+    that the bundle imports at all - which is exactly the failure a relative
+    import in the entry point produces, and it is invisible until launch.
+    """
+    exe = DIST / "U-Pool" / ("U-Pool.exe" if sys.platform == "win32" else "U-Pool")
+    result = subprocess.run([str(exe), "--version"], capture_output=True, text=True)
+    if result.returncode != 0:
+        raise SystemExit(
+            f"The bundle does not start: {exe} --version exited {result.returncode}.\n"
+            f"{result.stdout}{result.stderr}"
+        )
+    print(f"Smoke test: {exe.name} --version exited cleanly.")
+
+
+def package() -> Path:
+    """Zip the bundle for the GitHub release, and print the checksum to publish."""
+    base = DIST / f"U-Pool-{__version__}-win64"
+    archive = Path(shutil.make_archive(str(base), "zip", root_dir=DIST, base_dir="U-Pool"))
+    digest = hashlib.sha256()
+    with archive.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    checksums = DIST / "SHA256SUMS.txt"
+    checksums.write_text(f"{digest.hexdigest()}  {archive.name}\n", encoding="utf-8")
+    size_mb = archive.stat().st_size / 1024 / 1024
+    print(f"\nArchive: {archive}  ({size_mb:.1f} MB)")
+    print(f"SHA-256: {digest.hexdigest()}")
+    print(f"Wrote:   {checksums}")
+    return archive
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build the U-Pool desktop bundle.")
     parser.add_argument("--skip-ui", action="store_true", help="reuse the existing ui/out export")
@@ -89,7 +131,11 @@ def main() -> int:
         build_ui()
 
     build_app()
+    smoke_test()
+    archive = package()
     print(f"\nDone. Bundle: {DIST / 'U-Pool'}")
+    print(f"Attach {archive.name} and SHA256SUMS.txt to the release, or the updater has")
+    print("nothing to download.")
     return 0
 
 

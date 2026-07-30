@@ -5,7 +5,7 @@ import json
 import pytest
 
 from upool.adapters.claude import ClaudeAdapter
-from upool.models import APP_CLAUDE, AUTH_API_KEY, Provider, UPoolError
+from upool.models import APP_CLAUDE, AUTH_API_KEY, Provider
 
 
 @pytest.fixture
@@ -44,44 +44,44 @@ def test_api_key_auth_style_uses_the_other_header(adapter, settings_path):
     assert "ANTHROPIC_AUTH_TOKEN" not in env
 
 
-def test_unrelated_settings_are_preserved(adapter, settings_path):
+def test_unrelated_settings_are_removed_and_reported(adapter, settings_path):
     settings_path.parent.mkdir(parents=True)
     settings_path.write_text(
         json.dumps({"theme": "dark", "permissions": {"allow": ["Bash"]}, "env": {"KEEP": "yes"}}),
         encoding="utf-8",
     )
-    adapter.apply(provider())
+    result = adapter.apply(provider())
     data = json.loads(settings_path.read_text())
-    assert data["theme"] == "dark"
-    assert data["permissions"] == {"allow": ["Bash"]}
-    assert data["env"]["KEEP"] == "yes"
+    assert "theme" not in data
+    assert "permissions" not in data
+    assert "KEEP" not in data["env"]
+    assert set(result.removed) >= {"theme", "env.KEEP", "permissions.allow"}
+    # Reported, not warned about: rewriting the file whole is the intended outcome.
+    assert result.warnings == []
 
 
-def test_switching_clears_the_previous_providers_custom_env(adapter, settings_path):
-    first = provider(name="First", extra={"FIRST_ONLY": "1"})
-    adapter.apply(first)
+def test_a_switch_never_leaves_the_previous_providers_env_behind(adapter, settings_path):
+    adapter.apply(provider(name="First", extra={"FIRST_ONLY": "1"}))
     assert json.loads(settings_path.read_text())["env"]["FIRST_ONLY"] == "1"
 
-    second = provider(name="Second", base_url="https://second.example.com", api_key="sk-two")
-    adapter.apply(second, previous=first)
+    adapter.apply(provider(name="Second", base_url="https://second.example.com", api_key="sk-two"))
     env = json.loads(settings_path.read_text())["env"]
     assert "FIRST_ONLY" not in env
     assert env["ANTHROPIC_AUTH_TOKEN"] == "sk-two"
 
 
-def test_official_provider_removes_managed_env(adapter, settings_path):
-    live = provider()
-    adapter.apply(live)
-    adapter.apply(provider(name="Claude Official", official=True, base_url="", api_key=""), previous=live)
-    data = json.loads(settings_path.read_text())
-    assert "env" not in data
+def test_official_provider_empties_the_file(adapter, settings_path):
+    adapter.apply(provider())
+    adapter.apply(provider(name="Claude Official", official=True, base_url="", api_key=""))
+    assert json.loads(settings_path.read_text()) == {}
 
 
-def test_official_provider_keeps_user_env_vars(adapter, settings_path):
+def test_official_provider_drops_even_foreign_env_vars(adapter, settings_path):
     settings_path.parent.mkdir(parents=True)
     settings_path.write_text(json.dumps({"env": {"HTTP_PROXY": "http://proxy:8080"}}), encoding="utf-8")
-    adapter.apply(provider(name="Claude Official", official=True, base_url="", api_key=""))
-    assert json.loads(settings_path.read_text())["env"] == {"HTTP_PROXY": "http://proxy:8080"}
+    result = adapter.apply(provider(name="Claude Official", official=True, base_url="", api_key=""))
+    assert json.loads(settings_path.read_text()) == {}
+    assert result.removed == ["env.HTTP_PROXY"]
 
 
 def test_missing_key_produces_a_warning(adapter):
@@ -89,12 +89,28 @@ def test_missing_key_produces_a_warning(adapter):
     assert any("No API key" in w for w in result.warnings)
 
 
-def test_malformed_settings_file_is_left_untouched(adapter, settings_path):
+def test_a_malformed_settings_file_is_replaced_rather_than_blocking(adapter, settings_path):
     settings_path.parent.mkdir(parents=True)
     settings_path.write_text("{oops", encoding="utf-8")
-    with pytest.raises(UPoolError, match="not valid JSON"):
-        adapter.apply(provider())
-    assert settings_path.read_text() == "{oops"
+    result = adapter.apply(provider())
+    # Nothing in it was going to be preserved, so it is no longer a reason to refuse.
+    assert json.loads(settings_path.read_text())["env"]["ANTHROPIC_BASE_URL"]
+    assert result.removed == []
+    assert result.backups  # the unparsable original is still recoverable
+
+
+def test_the_pre_clean_write_archive_is_kept_once(adapter, settings_path):
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(json.dumps({"hooks": {"PreToolUse": []}}), encoding="utf-8")
+    first = adapter.apply(provider())
+    archives = [b for b in first.backups if b.endswith(".keep")]
+    assert len(archives) == 1
+    assert json.loads(open(archives[0], encoding="utf-8").read()) == {"hooks": {"PreToolUse": []}}
+
+    second = adapter.apply(provider(name="Other", base_url="https://other.example.com"))
+    assert not [b for b in second.backups if b.endswith(".keep")]
+    # Still the original, not the file as the first switch left it.
+    assert json.loads(open(archives[0], encoding="utf-8").read()) == {"hooks": {"PreToolUse": []}}
 
 
 def test_switch_backs_up_the_previous_file(adapter, settings_path):
@@ -124,21 +140,15 @@ def test_bypass_wins_when_both_boxes_are_ticked(adapter, settings_path):
     assert read(settings_path)["permissions"]["defaultMode"] == "bypassPermissions"
 
 
-def test_unticking_the_box_removes_the_mode_but_keeps_the_rules(adapter, settings_path):
+def test_an_unticked_box_takes_the_whole_permissions_block_with_it(adapter, settings_path):
     settings_path.parent.mkdir(parents=True)
     settings_path.write_text(
         json.dumps({"permissions": {"allow": ["Bash"], "defaultMode": "bypassPermissions"}}),
         encoding="utf-8",
     )
-    adapter.apply(provider())
-    assert read(settings_path)["permissions"] == {"allow": ["Bash"]}
-
-
-def test_a_mode_u_pool_never_writes_is_left_alone(adapter, settings_path):
-    settings_path.parent.mkdir(parents=True)
-    settings_path.write_text(json.dumps({"permissions": {"defaultMode": "plan"}}), encoding="utf-8")
-    adapter.apply(provider())
-    assert read(settings_path)["permissions"]["defaultMode"] == "plan"
+    result = adapter.apply(provider())
+    assert "permissions" not in read(settings_path)
+    assert set(result.removed) == {"permissions.allow", "permissions.defaultMode"}
 
 
 def test_the_permissions_block_goes_away_with_the_mode_that_created_it(adapter, settings_path):
@@ -154,7 +164,7 @@ def test_skipping_the_bypass_dialog_is_owned_by_its_own_box(adapter, settings_pa
     assert permissions["defaultMode"] == "bypassPermissions"
 
     # Ticked without bypass it is inert for Claude Code, but it is still the user's
-    # setting: dropping it here would delete a key whose box is on.
+    # setting, so the box - not the mode - decides whether it gets written.
     adapter.apply(provider(skip_bypass_prompt=True))
     permissions = read(settings_path)["permissions"]
     assert permissions["skipDangerousModePermissionPrompt"] is True
@@ -164,21 +174,12 @@ def test_skipping_the_bypass_dialog_is_owned_by_its_own_box(adapter, settings_pa
     assert "permissions" not in read(settings_path)
 
 
-def test_a_permissions_value_that_is_not_an_object_is_left_alone(adapter, settings_path):
+def test_a_permissions_value_of_the_wrong_shape_is_simply_replaced(adapter, settings_path):
     settings_path.parent.mkdir(parents=True)
     settings_path.write_text(json.dumps({"permissions": "everything"}), encoding="utf-8")
     result = adapter.apply(provider(bypass_permissions=True))
-    assert read(settings_path)["permissions"] == "everything"
-    assert any("not an object" in w for w in result.warnings)
-
-
-def test_a_settings_file_that_forbids_bypass_mode_produces_a_warning(adapter, settings_path):
-    settings_path.parent.mkdir(parents=True)
-    settings_path.write_text(
-        json.dumps({"permissions": {"disableBypassPermissionsMode": "disable"}}), encoding="utf-8"
-    )
-    result = adapter.apply(provider(bypass_permissions=True))
-    assert any("disableBypassPermissionsMode" in w for w in result.warnings)
+    assert read(settings_path)["permissions"] == {"defaultMode": "bypassPermissions"}
+    assert result.warnings == []
 
 
 def test_project_mcp_toggle_is_a_top_level_boolean(adapter, settings_path):
@@ -189,9 +190,8 @@ def test_project_mcp_toggle_is_a_top_level_boolean(adapter, settings_path):
 
 
 def test_official_provider_hands_the_permission_mode_back(adapter, settings_path):
-    live = provider(bypass_permissions=True, all_project_mcp=True)
-    adapter.apply(live)
-    adapter.apply(provider(name="Claude Official", official=True, base_url="", api_key=""), previous=live)
+    adapter.apply(provider(bypass_permissions=True, all_project_mcp=True))
+    adapter.apply(provider(name="Claude Official", official=True, base_url="", api_key=""))
     data = read(settings_path)
     assert "permissions" not in data
     assert "enableAllProjectMcpServers" not in data

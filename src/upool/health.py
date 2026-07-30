@@ -16,11 +16,11 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from . import adapters
+from . import __version__, adapters
 from .models import Provider
 
 DEFAULT_TIMEOUT = 10.0
-USER_AGENT = "U-Pool/0.1 (+health-check)"
+USER_AGENT = f"U-Pool/{__version__} (+health-check)"
 
 STATUS_OK = "ok"
 STATUS_AUTH = "auth"

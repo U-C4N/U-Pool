@@ -17,7 +17,7 @@ import traceback
 from pathlib import Path
 from typing import Any, Callable
 
-from . import __version__, adapters, autostart, health, paths, settings
+from . import __version__, adapters, autostart, health, paths, settings, updater
 from .models import Provider, UPoolError, as_bool, mask_secret
 from .store import Store
 
@@ -54,6 +54,7 @@ class Api:
     def __init__(self, store: Store | None = None) -> None:
         self.store = store or Store()
         self._window = None
+        self._updater = updater.Updater()
 
     def attach(self, window) -> None:
         self._window = window
@@ -64,13 +65,18 @@ class Api:
     def bootstrap(self) -> dict[str, Any]:
         """Everything the UI needs for its first paint, in one round trip."""
         apps = adapters.all_apps()
-        return {
+        payload = {
             "version": APP_VERSION,
             "platform": sys.platform,
             "apps": apps,
             "state": {app["id"]: self._app_state(app["id"]) for app in apps},
             "settings": self._settings(),
+            "update": self._updater.snapshot(),
         }
+        # Last, and only a thread spawn: first paint must not wait on the network,
+        # and a dead one must not delay it either.
+        self._updater.check_async()
+        return payload
 
     def _app_state(self, app: str) -> dict[str, Any]:
         current = self.store.current_id(app)
@@ -139,6 +145,7 @@ class Api:
             "files": result.files,
             "backups": result.backups,
             "warnings": result.warnings,
+            "removed": result.removed,
         }
 
     # ------------------------------------------------------------------ test
@@ -201,6 +208,7 @@ class Api:
             "autostart_blocked": bool(entry["blocked"]),
             "autostart_command": str(entry["command"]),
             "autostart_detail": str(entry["detail"]),
+            "update_check_enabled": bool(stored["update_check_enabled"]),
         }
 
     @endpoint
@@ -222,6 +230,30 @@ class Api:
                 f"could not be saved to {paths.settings_file()}: {exc}"
             ) from exc
         return self._settings()
+
+    # ------------------------------------------------------------------ updates
+
+    @endpoint
+    def update_status(self) -> dict[str, Any]:
+        """Current snapshot. Polled by the UI while an update is in flight."""
+        return self._updater.snapshot()
+
+    @endpoint
+    def check_updates(self, force: bool = False) -> dict[str, Any]:
+        return self._updater.check_async(force=as_bool(force))
+
+    @endpoint
+    def install_update(self) -> dict[str, Any]:
+        """Download and stage the newer release, then hand over to the swapper."""
+        return self._updater.install_async()
+
+    @endpoint
+    def skip_update(self, version: str) -> dict[str, Any]:
+        return self._updater.skip(str(version))
+
+    @endpoint
+    def set_update_checks(self, enabled: bool) -> dict[str, Any]:
+        return self._updater.set_checks_enabled(as_bool(enabled))
 
     @endpoint
     def open_startup_settings(self) -> str:

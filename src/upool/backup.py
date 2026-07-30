@@ -9,6 +9,9 @@ from pathlib import Path
 from . import paths
 
 KEEP_PER_FILE = 10
+# Suffix for the one-off keepsake copy. Deliberately *not* ``.bak``, so
+# :func:`prune` - which only ever looks at ``<name>.*.bak`` - cannot reach it.
+ARCHIVE_SUFFIX = "keep"
 
 
 def _slot_dir(app: str) -> Path:
@@ -33,6 +36,25 @@ def snapshot(app: str, source: Path) -> Path | None:
         counter += 1
     shutil.copy2(source, target)
     prune(app, source.name)
+    return target
+
+
+def archive_once(app: str, source: Path, tag: str) -> Path | None:
+    """Keep one permanent copy of ``source`` from before ``tag`` changed it.
+
+    A switch keeps only the ten most recent rolling backups, so the file as it
+    looked before U-Pool started rewriting it whole could age out after a busy
+    afternoon of switching. This copy is written at most once per file per tag
+    and is never pruned.
+    """
+    if not source.exists():
+        return None
+    target_dir = _slot_dir(app)
+    target = target_dir / f"{source.name}.pre-{tag}.{ARCHIVE_SUFFIX}"
+    if target.exists():
+        return None
+    target_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, target)
     return target
 
 

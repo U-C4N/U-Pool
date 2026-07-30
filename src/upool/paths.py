@@ -14,6 +14,7 @@ APP_DIR_NAME = ".u-pool"
 CONFIG_FILE_NAME = "config.json"
 SETTINGS_FILE_NAME = "settings.json"
 BACKUP_DIR_NAME = "backups"
+UPDATE_DIR_NAME = "update"
 
 
 def home() -> Path:
@@ -42,6 +43,21 @@ def settings_file() -> Path:
 
 def backup_dir() -> Path:
     return app_home() / BACKUP_DIR_NAME
+
+
+def update_dir() -> Path:
+    """Scratch space for the self-updater.
+
+    Under ``app_home`` on purpose: it is always writable, it survives the install
+    folder being renamed out from under us, and the swap script that does the
+    renaming lives in neither of the directories it touches.
+    """
+    return app_home() / UPDATE_DIR_NAME
+
+
+def update_cache_dir() -> Path:
+    """Where a downloaded release archive waits, so a retry is free."""
+    return update_dir() / "cache"
 
 
 def claude_dir() -> Path:

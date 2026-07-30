@@ -6,7 +6,16 @@ Codex reads it from the environment variable named by ``env_key``, and reads
 ``OPENAI_API_KEY`` out of ``auth.json`` as well - which is the only one U-Pool
 can write on the user's behalf.
 
-The TOML is edited with tomlkit so comments and key order survive a switch.
+``config.toml`` is written from scratch on every switch: exactly one
+``[model_providers.<slug>]`` table, and only the root keys this provider asked
+for. Editing the file in place is what used to let dead provider tables and root
+keys from an earlier setup pile up until Codex read two providers at once. The
+names that were dropped come back on
+:class:`~upool.adapters.base.ApplyResult` and ``backup`` keeps a copy.
+
+``auth.json`` is the exception and is still merged key by key. It is a credential
+store rather than a provider config - rewriting it whole would throw away a
+ChatGPT login that U-Pool cannot recreate.
 """
 
 from __future__ import annotations
@@ -24,7 +33,7 @@ from ..models import (
     Provider,
     UPoolError,
 )
-from .base import Adapter, ApplyResult
+from .base import CLEAN_WRITE_TAG, Adapter, ApplyResult
 
 AUTH_ENV_KEY = "OPENAI_API_KEY"
 PROVIDERS_KEY = "model_providers"
@@ -49,8 +58,8 @@ BOOL_EXTRA_KEYS = frozenset(
 )
 
 # Root-level knobs behind the advanced checkboxes. Written while the box is
-# ticked, removed again when it is not - but only when the value on disk is the
-# one U-Pool would have written, so a hand-picked policy is never overruled.
+# ticked; an unticked box simply does not write them, since the document starts
+# empty.
 #
 # Together these two are exactly what ``--dangerously-bypass-approvals-and-sandbox``
 # sets. They are Codex-wide keys: inside ``[model_providers.<slug>]`` Codex would
@@ -63,8 +72,19 @@ BYPASS_SANDBOX_MODE = "danger-full-access"
 # The switch that actually works is this top-level string.
 WEB_SEARCH_KEY = "web_search"
 WEB_SEARCH_LIVE = "live"
-# Newer permission profiles supersede sandbox_mode and cannot be combined with it.
-PERMISSIONS_PROFILE_KEY = "default_permissions"
+
+# Root keys a clean write can produce. Anything else found in config.toml on the
+# way out is reported as removed.
+OWNED_ROOT_KEYS = frozenset(
+    {
+        PROVIDERS_KEY,
+        "model_provider",
+        "model",
+        APPROVAL_POLICY_KEY,
+        SANDBOX_MODE_KEY,
+        WEB_SEARCH_KEY,
+    }
+) | TOP_LEVEL_EXTRA_KEYS
 
 
 def _coerce_extra_value(key: str, value: str):
@@ -106,28 +126,25 @@ class CodexAdapter(Adapter):
             raise UPoolError(f"{auth_path} does not contain a JSON object.")
         return data
 
-    def apply(self, provider: Provider, previous: Provider | None = None) -> ApplyResult:
+    def apply(self, provider: Provider) -> ApplyResult:
         result = ApplyResult()
-        doc = self._read_config()
-
-        providers = doc.get(PROVIDERS_KEY)
-        if providers is None:
-            providers = tomlkit.table(is_super_table=True)
-            doc[PROVIDERS_KEY] = providers
-
-        # Retire the table we wrote for the provider we are switching away from,
-        # so config.toml does not accumulate dead endpoints and stale keys.
-        if previous is not None and not previous.official and previous.slug in providers:
-            if previous.slug != provider.slug or provider.official:
-                del providers[previous.slug]
+        config_path = paths.codex_config_file()
+        doc = tomlkit.document()
 
         if provider.official:
-            doc.pop("model_provider", None)
             if provider.model:
                 doc["model"] = provider.model
-            for key in TOP_LEVEL_EXTRA_KEYS:
-                doc.pop(key, None)
         else:
+            doc["model_provider"] = provider.slug
+            if provider.model:
+                doc["model"] = provider.model
+            # Top-level Codex knobs (reasoning effort, storage, auth preference…).
+            for key in TOP_LEVEL_EXTRA_KEYS:
+                value = provider.extra.get(key, "")
+                if value != "":
+                    doc[key] = _coerce_extra_value(key, value)
+            self._apply_toggles(doc, provider)
+
             entry = tomlkit.table()
             entry["name"] = provider.name
             entry["base_url"] = provider.base_url.rstrip("/")
@@ -139,24 +156,17 @@ class CodexAdapter(Adapter):
                 if key in TOP_LEVEL_EXTRA_KEYS:
                     continue
                 entry[key] = _coerce_extra_value(key, value)
+            # Assigned last: the provider table is the only table in the document,
+            # so it belongs after every root key in the rendered output.
+            providers = tomlkit.table(is_super_table=True)
             providers[provider.slug] = entry
-            doc["model_provider"] = provider.slug
-            if provider.model:
-                doc["model"] = provider.model
-            # Top-level Codex knobs (reasoning effort, storage, auth preference…).
-            for key in TOP_LEVEL_EXTRA_KEYS:
-                value = provider.extra.get(key, "")
-                if value == "":
-                    doc.pop(key, None)
-                else:
-                    doc[key] = _coerce_extra_value(key, value)
+            doc[PROVIDERS_KEY] = providers
 
-        self._apply_toggles(doc, provider, result)
+        result.removed = self._removed(config_path, doc, provider)
 
-        if len(providers) == 0:
-            doc.pop(PROVIDERS_KEY, None)
-
-        config_path = paths.codex_config_file()
+        archive = backup.archive_once(self.app, config_path, CLEAN_WRITE_TAG)
+        if archive:
+            result.backups.append(str(archive))
         snap = backup.snapshot(self.app, config_path)
         if snap:
             result.backups.append(str(snap))
@@ -166,29 +176,40 @@ class CodexAdapter(Adapter):
         result.warnings.extend(self._apply_auth(provider, result))
         return result
 
-    def _apply_toggles(self, doc: TOMLDocument, provider: Provider, result: ApplyResult) -> None:
+    @staticmethod
+    def _apply_toggles(doc: TOMLDocument, provider: Provider) -> None:
         """Project the advanced checkboxes onto the root of config.toml."""
-        bypass = provider.bypass_approvals and not provider.official
-        if bypass:
+        if provider.bypass_approvals:
             doc[APPROVAL_POLICY_KEY] = BYPASS_APPROVAL_POLICY
             doc[SANDBOX_MODE_KEY] = BYPASS_SANDBOX_MODE
-        elif self._bypass_pair_present(doc):
-            # Both halves together are U-Pool's own fingerprint - and the only shape
-            # import_live reads back as "bypass on". A lone hand-written
-            # sandbox_mode = "danger-full-access" is somebody else's setting: leave it.
-            doc.pop(APPROVAL_POLICY_KEY, None)
-            doc.pop(SANDBOX_MODE_KEY, None)
-        self._root_flag(
-            doc,
-            WEB_SEARCH_KEY,
-            WEB_SEARCH_LIVE,
-            provider.web_search and not provider.official,
+        if provider.web_search:
+            doc[WEB_SEARCH_KEY] = WEB_SEARCH_LIVE
+
+    def _removed(self, config_path: Path, doc: TOMLDocument, provider: Provider) -> list[str]:
+        """Root keys and provider tables the clean write will not put back.
+
+        Best-effort: this only feeds a message, and unparsable TOML is no longer a
+        reason to refuse the switch, so a parse failure just means no message.
+        """
+        try:
+            before = self._read_config()
+        except UPoolError:
+            return []
+        gone = [str(key) for key in before if str(key) not in OWNED_ROOT_KEYS]
+        # Owned keys that were there and are not being written back. The provider
+        # table is skipped here because it is reported slug by slug below.
+        gone.extend(
+            str(key)
+            for key in OWNED_ROOT_KEYS
+            if key != PROVIDERS_KEY and key in before and key not in doc
         )
-        if bypass and PERMISSIONS_PROFILE_KEY in doc:
-            result.warnings.append(
-                f"config.toml already sets {PERMISSIONS_PROFILE_KEY}, which replaces "
-                f"{SANDBOX_MODE_KEY} - Codex will not accept both."
+        old_providers = before.get(PROVIDERS_KEY)
+        if isinstance(old_providers, dict):
+            kept = "" if provider.official else provider.slug
+            gone.extend(
+                f"{PROVIDERS_KEY}.{slug}" for slug in old_providers if str(slug) != kept
             )
+        return sorted(set(gone))
 
     @staticmethod
     def _bypass_pair_present(doc: TOMLDocument) -> bool:
@@ -196,14 +217,6 @@ class CodexAdapter(Adapter):
             doc.get(APPROVAL_POLICY_KEY) == BYPASS_APPROVAL_POLICY
             and doc.get(SANDBOX_MODE_KEY) == BYPASS_SANDBOX_MODE
         )
-
-    @staticmethod
-    def _root_flag(doc: TOMLDocument, key: str, value: str, enabled: bool) -> None:
-        """Own ``key`` while the box is ticked; give it back when it is not."""
-        if enabled:
-            doc[key] = value
-        elif doc.get(key) == value:
-            doc.pop(key, None)
 
     def _apply_auth(self, provider: Provider, result: ApplyResult) -> list[str]:
         """Write the key into auth.json, preserving any ChatGPT login tokens."""

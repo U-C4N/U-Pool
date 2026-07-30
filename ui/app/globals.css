@@ -195,6 +195,19 @@ textarea,
   to { background-position: 100% 50%; }
 }
 
+/* An update is waiting. Loud enough to notice on a settings sheet the user
+   opened for another reason, quiet enough not to be a strobe. */
+@keyframes upool-attention {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgb(255 149 0 / 0.55);
+  }
+  50% {
+    opacity: 0.82;
+    box-shadow: 0 0 0 6px rgb(255 149 0 / 0);
+  }
+}
+
 .animate-toast-in {
   animation: upool-toast-in 360ms var(--spring);
 }
@@ -205,6 +218,10 @@ textarea,
 
 .animate-sheet-in {
   animation: upool-sheet-in 420ms var(--spring-bounce);
+}
+
+.animate-attention {
+  animation: upool-attention 1.6s ease-in-out infinite;
 }
 
 /* Translucent materials — hierarchy via weight, not glow. */
@@ -339,7 +356,9 @@ textarea,
   .brand-wordmark,
   .animate-toast-in,
   .animate-fade-in,
-  .animate-sheet-in {
+  .animate-sheet-in,
+  /* A blinking button is exactly what this query exists to switch off. */
+  .animate-attention {
     animation: none !important;
   }
 

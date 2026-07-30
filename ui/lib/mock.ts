@@ -14,6 +14,8 @@ import type {
   Bootstrap,
   HealthResult,
   ProviderDetail,
+  ReleaseInfo,
+  UpdateStatus,
 } from "./types";
 
 type Envelope<T> = { ok: boolean; data?: T; error?: string };
@@ -59,6 +61,43 @@ const mockSettings: AppSettings = {
   autostart_blocked: false,
   autostart_command: "",
   autostart_detail: "Browser preview - the real switch needs the desktop app.",
+  update_check_enabled: true,
+};
+
+const mockRelease: ReleaseInfo = {
+  tag: "v0.9.0",
+  version: "0.9.0",
+  notes: "Pretend release notes for the browser preview.",
+  html_url: "https://github.com/U-C4N/U-Pool/releases/latest",
+  published_at: "2026-08-01T00:00:00Z",
+  asset_name: "U-Pool-0.9.0-win64.zip",
+  asset_url: "https://github.com/U-C4N/U-Pool/releases/download/v0.9.0/U-Pool-0.9.0-win64.zip",
+  asset_size: 48 * 1024 * 1024,
+  asset_sha256: "0".repeat(64),
+  checksums_url: "",
+  has_asset: true,
+};
+
+/**
+ * Enough of the update state machine to design against: an available update,
+ * then a download that ticks along whenever the UI polls.
+ */
+const mockUpdate: UpdateStatus = {
+  phase: "available",
+  percent: null,
+  detail: "",
+  release: mockRelease,
+  error: "",
+  kind: "source",
+  can_install: false,
+  blocker: "Browser preview - installing an update needs the desktop app.",
+  verified: "",
+  skipped_version: "",
+  last_check: Math.floor(Date.now() / 1000),
+  current_version: "0.5.0-mock",
+  installed_from: "",
+  install_failed: "",
+  busy: false,
 };
 
 const db: Record<AppId, { current: string; providers: ProviderDetail[] }> = {
@@ -100,7 +139,7 @@ const find = (app: AppId, id: string) => db[app].providers.find((p) => p.id === 
 export const mockApi = {
   bootstrap: () =>
     ok<Bootstrap>({
-      version: "0.4.0-mock",
+      version: "0.5.0-mock",
       platform: "browser",
       apps: [
         { id: "claude", label: "Claude Code" },
@@ -108,6 +147,7 @@ export const mockApi = {
       ],
       state: { claude: state("claude"), codex: state("codex") },
       settings: mockSettings,
+      update: { ...mockUpdate },
     }),
   list_providers: (app: AppId) => ok(state(app)),
   get_provider: (app: AppId, id: string) => {
@@ -146,7 +186,13 @@ export const mockApi = {
   switch_provider: (app: AppId, id: string) => {
     if (!find(app, id)) return fail("That provider no longer exists.");
     db[app].current = id;
-    return ok({ state: state(app), files: state(app).files, backups: [], warnings: [] });
+    return ok({
+      state: state(app),
+      files: state(app).files,
+      backups: [],
+      warnings: [],
+      removed: app === "claude" ? ["hooks", "env.API_TIMEOUT_MS"] : ["model_providers.yunwu"],
+    });
   },
   test_provider: (app: AppId, id: string): Promise<Envelope<HealthResult>> => {
     const provider = find(app, id);
@@ -204,4 +250,36 @@ export const mockApi = {
     return ok<AppSettings>({ ...mockSettings });
   },
   open_startup_settings: () => fail("Launching at sign-in is wired up for Windows only."),
+  update_status: () => {
+    // Advance the fake download a step per poll, so the bar actually moves.
+    if (mockUpdate.phase === "downloading") {
+      const next = (mockUpdate.percent ?? 0) + 8;
+      if (next >= 80) {
+        Object.assign(mockUpdate, {
+          phase: "relaunching",
+          percent: 100,
+          detail: "Restarting into 0.9.0…",
+          busy: false,
+        });
+      } else {
+        Object.assign(mockUpdate, { percent: next, detail: `${next * 6} MB of 480 MB` });
+      }
+    }
+    return ok<UpdateStatus>({ ...mockUpdate });
+  },
+  check_updates: () => {
+    Object.assign(mockUpdate, { phase: "available", error: "", detail: "", busy: false });
+    return ok<UpdateStatus>({ ...mockUpdate });
+  },
+  install_update: () => {
+    if (!mockUpdate.can_install) return fail(mockUpdate.blocker);
+    Object.assign(mockUpdate, { phase: "downloading", percent: 0, busy: true });
+    return ok<UpdateStatus>({ ...mockUpdate });
+  },
+  skip_update: (version: string) => {
+    mockUpdate.skipped_version = version;
+    return ok<UpdateStatus>({ ...mockUpdate });
+  },
+  set_update_checks: () => ok<UpdateStatus>({ ...mockUpdate }),
+  quit: () => ok(true),
 };

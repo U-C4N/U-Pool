@@ -4,7 +4,21 @@ from upool import atomicio, paths, settings
 
 
 def test_defaults_apply_when_nothing_has_been_saved():
-    assert settings.load() == {"launch_at_startup": False}
+    # The sandbox seeds a settings file to keep tests off the network, so this
+    # has to look at a genuinely empty state.
+    paths.settings_file().unlink()
+    assert settings.load() == {
+        "launch_at_startup": False,
+        "update_check_enabled": True,
+        "update_last_check": 0,
+        "update_skipped_version": "",
+        "update_last_seen_version": "",
+    }
+
+
+def test_a_hand_edited_last_check_that_is_not_a_number_reads_as_zero():
+    atomicio.write_json(paths.settings_file(), {"update_last_check": "yesterday"})
+    assert settings.load()["update_last_check"] == 0
 
 
 def test_update_round_trips_and_keeps_keys_it_does_not_know():

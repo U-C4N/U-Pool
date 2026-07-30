@@ -17,6 +17,7 @@ import type {
   HealthResult,
   ProviderDetail,
   ProviderSummary,
+  UpdateStatus,
 } from "@/lib/types";
 
 type View = { mode: "list" } | { mode: "form"; provider: ProviderDetail | null };
@@ -42,6 +43,7 @@ export default function Page() {
   const [savingSettings, setSavingSettings] = useState(false);
   // Generation counter so a slow settings read cannot land on top of a newer write.
   const settingsRead = useRef(0);
+  const [update, setUpdate] = useState<UpdateStatus | null>(null);
   const [paths, setPaths] = useState<AppPaths | null>(null);
   const [meta, setMeta] = useState({ version: "", platform: "" });
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -66,6 +68,7 @@ export default function Page() {
         setApp(data.apps[0]?.id ?? "claude");
         setMeta({ version: data.version, platform: data.platform });
         setSettings(data.settings);
+        setUpdate(data.update);
         // Checked only once the bridge has resolved, otherwise pywebview's
         // late API injection would look like a missing backend.
         setMockBridge(isMockBridge());
@@ -103,9 +106,15 @@ export default function Page() {
       apply(app, result.state);
       if (result.warnings.length > 0) {
         push("error", `Switched to ${provider.name}`, result.warnings.join(" "));
-      } else {
-        push("success", `${provider.name} is now in use`, result.files.join("  •  "));
+        return;
       }
+      // A switch rewrites the file whole, so say what that cost when it cost
+      // something. The backup is one click away in Settings.
+      const detail =
+        result.removed.length > 0
+          ? `${result.files.join("  •  ")} — rewritten from scratch; removed ${result.removed.join(", ")}`
+          : result.files.join("  •  ");
+      push("success", `${provider.name} is now in use`, detail);
     },
     [app, apply, push, run],
   );
@@ -238,7 +247,79 @@ export default function Page() {
       .getSettings()
       .then((next) => token === settingsRead.current && setSettings(next))
       .catch(() => undefined);
+    backend.checkUpdates(false).then(setUpdate).catch(() => undefined);
   }, []);
+
+  // Only poll while the backend is actually working; the rest of the time the
+  // snapshot cannot change without us asking for it.
+  useEffect(() => {
+    if (!update?.busy) return;
+    const timer = setInterval(() => {
+      backend.updateStatus().then(setUpdate).catch(() => undefined);
+    }, 600);
+    return () => clearInterval(timer);
+  }, [update?.busy]);
+
+  // The install has staged the new version and a detached script is waiting for
+  // this process to exit. Closing the window is the webview thread's job.
+  useEffect(() => {
+    if (update?.phase !== "relaunching") return;
+    const timer = setTimeout(() => {
+      backend.quit().catch(() => undefined);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [update?.phase]);
+
+  useEffect(() => {
+    if (!update) return;
+    if (update.installed_from) {
+      push("success", `Updated to ${update.current_version}`, `Was ${update.installed_from}.`);
+    } else if (update.install_failed) {
+      push(
+        "error",
+        "The last update did not go through",
+        update.install_failed === "rolled_back"
+          ? "The previous version was put back."
+          : `The swap reported "${update.install_failed}".`,
+      );
+    }
+    // Reported once: the backend clears the marker as soon as it has read it.
+  }, [update?.installed_from, update?.install_failed]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleInstallUpdate = useCallback(() => {
+    backend
+      .installUpdate()
+      .then(setUpdate)
+      .catch((error) => push("error", message(error)));
+  }, [push]);
+
+  const handleSkipUpdate = useCallback(
+    (version: string) => {
+      backend
+        .skipUpdate(version)
+        .then((next) => {
+          setUpdate(next);
+          push("success", `Skipped ${version}`, "The next release will be offered again.");
+        })
+        .catch((error) => push("error", message(error)));
+    },
+    [push],
+  );
+
+  const handleToggleUpdateChecks = useCallback(
+    async (enabled: boolean) => {
+      setSavingSettings(true);
+      try {
+        setUpdate(await backend.setUpdateChecks(enabled));
+        setSettings(await backend.getSettings());
+      } catch (error) {
+        push("error", message(error));
+      } finally {
+        setSavingSettings(false);
+      }
+    },
+    [push],
+  );
 
   const handlers: RowHandlers = {
     onSwitch: handleSwitch,
@@ -275,6 +356,11 @@ export default function Page() {
         onOpenFolder={() => state.files[0] && openPath(state.files[0])}
         onOpenSettings={openSettings}
         testing={testing}
+        updateAvailable={
+          update?.phase === "available" &&
+          Boolean(update.release) &&
+          update.skipped_version !== update.release?.version
+        }
       />
 
       {mockBridge ? (
@@ -337,11 +423,31 @@ export default function Page() {
           liveFiles={state.files}
           settings={settings}
           savingSettings={savingSettings}
+          update={update}
           onOpen={openPath}
           onToggleStartup={handleToggleStartup}
           onOpenStartupSettings={openStartupSettings}
+          onInstallUpdate={handleInstallUpdate}
+          onSkipUpdate={handleSkipUpdate}
+          onToggleUpdateChecks={handleToggleUpdateChecks}
+          onOpenExternal={(url) =>
+            backend.openExternal(url).catch((error) => push("error", message(error)))
+          }
           onClose={() => setSettingsOpen(false)}
         />
+      ) : null}
+
+      {update?.phase === "relaunching" ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[var(--color-bg)]/85 backdrop-blur-sm">
+          <div className="text-center">
+            <p className="text-[15px] font-semibold text-[var(--color-label)]">
+              Restarting into {update.release?.version ?? "the new version"}
+            </p>
+            <p className="mt-2 text-[13px] text-[var(--color-secondary-label)]">
+              U-Pool will close and open again on its own.
+            </p>
+          </div>
+        </div>
       ) : null}
 
       <ToastStack toasts={toasts} onDismiss={dismiss} />

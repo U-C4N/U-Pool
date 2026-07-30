@@ -40,6 +40,7 @@ function MaskMark({
 const PRESET_ICON: Record<string, string> = {
   custom: "/brands/custom.svg",
   "openai-api": "/brands/openai.svg",
+  codefast: "/brands/codefast.svg",
   kadirr: "/brands/kadirr-mark.png",
   yunwu: "/brands/yunwu-mark.png",
   deepseek: "/brands/deepseek.svg",

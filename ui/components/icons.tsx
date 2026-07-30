@@ -28,6 +28,15 @@ export const PlusIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Update available — arrow into a tray. */
+export const DownloadIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 4v10" />
+    <path d="m8 10.5 4 3.5 4-3.5" />
+    <path d="M5 17.5v1a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5v-1" />
+  </Svg>
+);
+
 /** Settings — horizontal sliders (SF: slider.horizontal.3). */
 export const GearIcon = (p: IconProps) => (
   <Svg {...p}>

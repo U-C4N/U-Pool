@@ -19,9 +19,9 @@ export type ProviderPreset = {
 
 /**
  * Curated presets for Claude Code & Codex.
- * OpenAI API (Codex), Kadirr.Dev (Codex), Yunwu, DeepSeek, Kimi, Kimi Coding,
- * OpenRouter, MiniMax CH/Global, Z.ai, Zhipu GLM, Nvidia NIM, OpenCode Go,
- * Xiaomi MiMo, Azure, xAI (+ Custom).
+ * OpenAI API (Codex), CodeFast, Kadirr.Dev (Codex), Yunwu, DeepSeek, Kimi,
+ * Kimi Coding, OpenRouter, MiniMax CH/Global, Z.ai, Zhipu GLM, Nvidia NIM,
+ * OpenCode Go, Xiaomi MiMo, Azure, xAI (+ Custom).
  */
 export const CLAUDE_PRESETS: ProviderPreset[] = [
   {
@@ -31,6 +31,16 @@ export const CLAUDE_PRESETS: ProviderPreset[] = [
     base_url: "",
     note: "Blank template",
     tint: "#8E8E93",
+  },
+  {
+    id: "codefast",
+    name: "CodeFast",
+    website: "https://codefast.app",
+    base_url: "https://api.codefast.app/claude-api",
+    model: "claude-sonnet-5",
+    auth_style: "api_key",
+    note: "Claude Max relay — sonnet-5, fable-5, opus-4-8/4-7/4-6, sonnet-4-6/4-5, haiku-4-5. If auth fails, switch Auth style to Auth token.",
+    tint: "#F59E0B",
   },
   {
     id: "yunwu",
@@ -169,6 +179,24 @@ export const CODEX_PRESETS: ProviderPreset[] = [
     env_key: "OPENAI_API_KEY",
     note: "Official OpenAI API",
     tint: "#10A37F",
+  },
+  {
+    id: "codefast",
+    name: "CodeFast",
+    website: "https://codefast.app",
+    base_url: "https://api.codefast.app/codex-api/v1",
+    model: "gpt-5.6-sol",
+    wire_api: "responses",
+    // The docs use env_key = "codefast", which you then have to export yourself.
+    // OPENAI_API_KEY is the one U-Pool can write into auth.json, so the preset
+    // works without a manual step; change it here if you prefer their form.
+    env_key: "OPENAI_API_KEY",
+    note: "Responses API relay — gpt-5.6-sol/terra/luna, gpt-5.5, gpt-5.4(-mini), gpt-5.3-codex(-spark), gpt-5.2, gpt-oss-120b-medium",
+    tint: "#F59E0B",
+    extra: {
+      model_reasoning_effort: "high",
+      disable_response_storage: "true",
+    },
   },
   {
     id: "kadirr",

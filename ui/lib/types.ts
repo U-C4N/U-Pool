@@ -69,6 +69,57 @@ export interface AppSettings {
   autostart_blocked: boolean;
   autostart_command: string;
   autostart_detail: string;
+  /** Whether the periodic GitHub release check runs at all. */
+  update_check_enabled: boolean;
+}
+
+export type UpdatePhase =
+  | "idle"
+  | "checking"
+  | "up_to_date"
+  | "available"
+  | "downloading"
+  | "verifying"
+  | "staging"
+  | "relaunching"
+  | "error";
+
+/** The release GitHub is offering, as the backend read it. */
+export interface ReleaseInfo {
+  tag: string;
+  version: string;
+  notes: string;
+  html_url: string;
+  published_at: string;
+  asset_name: string;
+  asset_url: string;
+  asset_size: number;
+  asset_sha256: string;
+  checksums_url: string;
+  has_asset: boolean;
+}
+
+export interface UpdateStatus {
+  phase: UpdatePhase;
+  /** 0-100 while work is in flight, null otherwise. */
+  percent: number | null;
+  detail: string;
+  release: ReleaseInfo | null;
+  error: string;
+  /** "frozen" for the packaged bundle, "source" for a checkout. */
+  kind: string;
+  can_install: boolean;
+  /** Why an in-place install is not possible, in one sentence. */
+  blocker: string;
+  /** What the download could actually be checked against. */
+  verified: string;
+  skipped_version: string;
+  last_check: number;
+  current_version: string;
+  /** Set on the launch right after a successful swap. */
+  installed_from: string;
+  install_failed: string;
+  busy: boolean;
 }
 
 export interface Bootstrap {
@@ -77,6 +128,7 @@ export interface Bootstrap {
   apps: AppInfo[];
   state: Record<AppId, AppState>;
   settings: AppSettings;
+  update: UpdateStatus;
 }
 
 export interface SwitchResult {
@@ -84,6 +136,8 @@ export interface SwitchResult {
   files: string[];
   backups: string[];
   warnings: string[];
+  /** Keys that were in the live file and are not any more - a switch rewrites it whole. */
+  removed: string[];
 }
 
 export type HealthStatus = "ok" | "auth" | "warn" | "error" | "unreachable" | "skipped";

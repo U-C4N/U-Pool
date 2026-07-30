@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from upool import autostart
+from upool import atomicio, autostart, paths
 from upool.store import Store
 
 # The real value lives under HKCU\...\CurrentVersion\Run. Tests get their own
@@ -28,11 +28,17 @@ def _drop_test_registry_keys() -> None:
 
 @pytest.fixture(autouse=True)
 def sandbox(tmp_path, monkeypatch):
-    """Redirect both the fake HOME and U-Pool's own state into tmp_path."""
+    """Redirect both the fake HOME and U-Pool's own state into tmp_path.
+
+    Update checks are seeded off: ``Api.bootstrap`` fires one in the background,
+    and no test may reach out to api.github.com. A test that wants the check has
+    to turn it on, or pass ``force=True``.
+    """
     fake_home = tmp_path / "home"
     fake_home.mkdir()
     monkeypatch.setenv("UPOOL_FAKE_HOME", str(fake_home))
     monkeypatch.setenv("UPOOL_HOME", str(tmp_path / "state"))
+    atomicio.write_json(paths.settings_file(), {"update_check_enabled": False})
     monkeypatch.setattr(autostart, "RUN_KEY", TEST_RUN_KEY)
     monkeypatch.setattr(autostart, "APPROVED_KEY", TEST_APPROVED_KEY)
     _drop_test_registry_keys()

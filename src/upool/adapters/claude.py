@@ -1,13 +1,16 @@
 """Claude Code adapter - ``~/.claude/settings.json``.
 
-Claude Code reads provider settings from the ``env`` block of its settings
-file. Everything else in that file (hooks, statusLine, the permission
-allow/deny lists, ...) is the user's and is preserved untouched.
+U-Pool owns this file outright. Every switch writes it from scratch from the
+provider record: the ``env`` block Claude Code reads its endpoint and key from,
+plus the three keys behind the advanced checkboxes
+(``permissions.defaultMode``, ``permissions.skipDangerousModePermissionPrompt``
+and ``enableAllProjectMcpServers``). Anything else that was in the file is gone.
 
-Three keys are exceptions, each behind an explicit checkbox in the provider form:
-``permissions.defaultMode``, ``permissions.skipDangerousModePermissionPrompt`` and
-``enableAllProjectMcpServers``. While a box is ticked U-Pool owns that key;
-unticking it takes the key back out again.
+That is the point. Merging - keeping the keys we did not recognise - is what left
+a previous provider's variables sitting next to the new one's, which Claude Code
+then read as one contradictory configuration. The names that were dropped come
+back on :class:`~upool.adapters.base.ApplyResult` so the UI can say so, and
+``backup`` keeps a copy of the file as it was.
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ from ..models import (
     Provider,
     UPoolError,
 )
-from .base import Adapter, ApplyResult
+from .base import CLEAN_WRITE_TAG, Adapter, ApplyResult
 
 BASE_URL_KEY = "ANTHROPIC_BASE_URL"
 AUTH_TOKEN_KEY = "ANTHROPIC_AUTH_TOKEN"
@@ -30,8 +33,9 @@ API_KEY_KEY = "ANTHROPIC_API_KEY"
 MODEL_KEY = "ANTHROPIC_MODEL"
 SMALL_FAST_MODEL_KEY = "ANTHROPIC_SMALL_FAST_MODEL"
 
-# Keys U-Pool owns: they are cleared on every switch and rewritten from the
-# provider record, so a stale token from a previous provider can never survive.
+# The env vars U-Pool writes itself. Everything else in ``env`` comes from the
+# provider's ``extra`` map; this tuple is what ``import_live`` uses to tell the
+# two apart when reading an existing setup back in.
 MANAGED_KEYS = (
     BASE_URL_KEY,
     AUTH_TOKEN_KEY,
@@ -45,12 +49,12 @@ DEFAULT_MODE_KEY = "defaultMode"
 BYPASS_MODE = "bypassPermissions"
 ACCEPT_EDITS_MODE = "acceptEdits"
 PROJECT_MCP_KEY = "enableAllProjectMcpServers"
-DISABLE_BYPASS_KEY = "disableBypassPermissionsMode"
 # Bypass mode otherwise opens with a one-off "do you accept the risk" dialog.
 SKIP_BYPASS_PROMPT_KEY = "skipDangerousModePermissionPrompt"
-# The only two modes U-Pool ever writes. Anything else in ``defaultMode``
-# ("plan", "default", a typo) was put there by hand and is left alone.
-MANAGED_MODES = (BYPASS_MODE, ACCEPT_EDITS_MODE)
+
+# The keys a clean write can produce. Anything else found in the file on the way
+# out is reported as removed.
+OWNED_KEYS = ("env", PERMISSIONS_KEY, PROJECT_MCP_KEY)
 
 
 def permission_mode(provider: Provider) -> str:
@@ -88,22 +92,13 @@ class ClaudeAdapter(Adapter):
             raise UPoolError(f"{settings_path} does not contain a JSON object.")
         return data
 
-    def apply(self, provider: Provider, previous: Provider | None = None) -> ApplyResult:
+    def apply(self, provider: Provider) -> ApplyResult:
         result = ApplyResult()
         settings_path = paths.claude_settings_file()
-        settings = self._read_settings()
-
-        env = dict(settings.get("env") or {})
-        # Drop our own keys plus any custom ones the previous provider added,
-        # otherwise switching would leave orphaned variables behind.
-        stale = set(MANAGED_KEYS)
-        if previous is not None:
-            stale.update(previous.extra.keys())
-        for key in stale:
-            env.pop(key, None)
+        settings: dict = {}
 
         if not provider.official:
-            env[BASE_URL_KEY] = provider.base_url.rstrip("/")
+            env = {BASE_URL_KEY: provider.base_url.rstrip("/")}
             if provider.api_key:
                 target = AUTH_TOKEN_KEY if provider.auth_style == AUTH_TOKEN else API_KEY_KEY
                 env[target] = provider.api_key
@@ -114,14 +109,14 @@ class ClaudeAdapter(Adapter):
             if provider.small_fast_model:
                 env[SMALL_FAST_MODEL_KEY] = provider.small_fast_model
             env.update({k: v for k, v in provider.extra.items() if v != ""})
-
-        if env:
             settings["env"] = env
-        else:
-            settings.pop("env", None)
 
-        self._apply_toggles(settings, provider, result)
+        self._apply_toggles(settings, provider)
+        result.removed = self._removed(settings_path, settings)
 
+        archive = backup.archive_once(self.app, settings_path, CLEAN_WRITE_TAG)
+        if archive:
+            result.backups.append(str(archive))
         snap = backup.snapshot(self.app, settings_path)
         if snap:
             result.backups.append(str(snap))
@@ -129,61 +124,51 @@ class ClaudeAdapter(Adapter):
         result.files.append(str(settings_path))
         return result
 
-    def _apply_toggles(self, settings: dict, provider: Provider, result: ApplyResult) -> None:
-        """Project the advanced checkboxes onto settings.json.
+    @staticmethod
+    def _apply_toggles(settings: dict, provider: Provider) -> None:
+        """Project the advanced checkboxes onto a settings dict being built.
 
-        Inside the permissions block only the two keys behind a checkbox are
-        touched - the allow/deny/ask lists and everything else in there stay
-        exactly as the user left them, and the block is only rewritten at all if
-        something in it actually changed.
+        Nothing needs taking back out: an unticked box simply never writes its
+        key, because the dict starts empty.
         """
-        mode = permission_mode(provider)
-        raw = settings.get(PERMISSIONS_KEY)
-        if raw is not None and not isinstance(raw, dict):
-            # Same rule as a malformed settings.json: do not touch a shape we do not
-            # understand. Say so rather than replacing whatever is in there.
-            result.warnings.append(
-                f"'{PERMISSIONS_KEY}' in settings.json is not an object, so the permission "
-                "switches were skipped."
-            )
-            self._apply_project_mcp(settings, provider)
+        if provider.official:
             return
-        original = raw or {}
-        block = dict(original)
-
+        block = {}
+        mode = permission_mode(provider)
         if mode:
             block[DEFAULT_MODE_KEY] = mode
-        elif block.get(DEFAULT_MODE_KEY) in MANAGED_MODES:
-            # A mode we could have written, and nothing wants it now.
-            block.pop(DEFAULT_MODE_KEY, None)
-
-        # Owned by its own checkbox, not by the mode: Claude Code ignores it outside
-        # bypass mode, so removing it there would drop a key that is still ticked.
-        if provider.skip_bypass_prompt and not provider.official:
+        if provider.skip_bypass_prompt:
             block[SKIP_BYPASS_PROMPT_KEY] = True
-        elif block.get(SKIP_BYPASS_PROMPT_KEY) is True:
-            block.pop(SKIP_BYPASS_PROMPT_KEY, None)
-
-        if block != original:
-            if block:
-                settings[PERMISSIONS_KEY] = block
-            else:
-                settings.pop(PERMISSIONS_KEY, None)
-
-        if mode == BYPASS_MODE and block.get(DISABLE_BYPASS_KEY) == "disable":
-            result.warnings.append(
-                f"settings.json sets {DISABLE_BYPASS_KEY}, so Claude Code will refuse to "
-                "start in bypass mode."
-            )
-
-        self._apply_project_mcp(settings, provider)
-
-    @staticmethod
-    def _apply_project_mcp(settings: dict, provider: Provider) -> None:
-        if provider.all_project_mcp and not provider.official:
+        if block:
+            settings[PERMISSIONS_KEY] = block
+        if provider.all_project_mcp:
             settings[PROJECT_MCP_KEY] = True
-        elif settings.get(PROJECT_MCP_KEY) is True:
-            settings.pop(PROJECT_MCP_KEY, None)
+
+    def _removed(self, settings_path: Path, written: dict) -> list[str]:
+        """Names present in the file now that the clean write will not put back.
+
+        Best-effort by design: this only feeds a message. A file we cannot parse
+        is no longer a reason to refuse the switch - nothing in it was going to
+        be preserved anyway - so a parse failure just means no message.
+        """
+        try:
+            before = self._read_settings()
+        except UPoolError:
+            return []
+        gone = [key for key in before if key not in OWNED_KEYS]
+        old_env = before.get("env")
+        if isinstance(old_env, dict):
+            new_env = written.get("env") or {}
+            gone.extend(f"env.{name}" for name in old_env if name not in new_env)
+        old_perms = before.get(PERMISSIONS_KEY)
+        if isinstance(old_perms, dict):
+            new_perms = written.get(PERMISSIONS_KEY) or {}
+            gone.extend(f"{PERMISSIONS_KEY}.{name}" for name in old_perms if name not in new_perms)
+        elif old_perms is not None and PERMISSIONS_KEY not in written:
+            gone.append(PERMISSIONS_KEY)
+        if before.get(PROJECT_MCP_KEY) is not None and PROJECT_MCP_KEY not in written:
+            gone.append(PROJECT_MCP_KEY)
+        return gone
 
     def import_live(self) -> Provider | None:
         settings = self._read_settings()

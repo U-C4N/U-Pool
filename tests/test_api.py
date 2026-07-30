@@ -136,6 +136,7 @@ def test_settings_expose_the_startup_switch():
         "autostart_blocked",
         "autostart_command",
         "autostart_detail",
+        "update_check_enabled",
     }
     assert data["launch_at_startup"] is False
     assert data["autostart_supported"] is (sys.platform == "win32")

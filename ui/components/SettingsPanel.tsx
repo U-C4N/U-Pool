@@ -1,8 +1,128 @@
 "use client";
 
-import type { AppPaths, AppSettings } from "@/lib/types";
-import { FolderIcon } from "./icons";
+import type { AppPaths, AppSettings, UpdateStatus } from "@/lib/types";
+import { DownloadIcon, FolderIcon } from "./icons";
 import { Button, IconButton, Modal, Switch } from "./ui";
+
+const BUSY_LABEL: Record<string, string> = {
+  checking: "Checking for updates…",
+  downloading: "Downloading",
+  verifying: "Verifying",
+  staging: "Unpacking",
+  relaunching: "Restarting",
+};
+
+function UpdateSection({
+  update,
+  checksEnabled,
+  savingSettings,
+  onInstall,
+  onSkip,
+  onOpenNotes,
+  onToggleChecks,
+}: {
+  update: UpdateStatus | null;
+  checksEnabled: boolean;
+  savingSettings: boolean;
+  onInstall: () => void;
+  onSkip: (version: string) => void;
+  onOpenNotes: (url: string) => void;
+  onToggleChecks: (enabled: boolean) => void;
+}) {
+  const rel = update?.release ?? null;
+  const version = rel?.version ?? "";
+  const skipped = Boolean(version) && update?.skipped_version === version;
+  const offered = update?.phase === "available" && Boolean(version) && !skipped;
+  const busyLabel = update ? BUSY_LABEL[update.phase] : undefined;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Updates</p>
+      <div className="rounded-[10px] bg-[var(--color-fill)] px-3 py-2.5">
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-[var(--color-label)]">
+              {offered
+                ? `U-Pool ${version} is available`
+                : busyLabel ?? (update?.phase === "up_to_date" ? "U-Pool is up to date" : "Updates")}
+            </p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--color-secondary-label)]">
+              {update?.error ||
+                update?.detail ||
+                (skipped
+                  ? `Version ${version} was skipped. It will be offered again next release.`
+                  : offered && !update?.can_install
+                    ? update.blocker
+                    : "Checked against the GitHub releases page every few hours.")}
+            </p>
+          </div>
+          {offered ? (
+            update.can_install ? (
+              <Button
+                variant="primary"
+                className="animate-attention shrink-0"
+                onClick={onInstall}
+              >
+                <DownloadIcon className="h-4 w-4" />
+                Update
+              </Button>
+            ) : (
+              <Button className="shrink-0" onClick={() => onOpenNotes(rel!.html_url)}>
+                Open release page
+              </Button>
+            )
+          ) : null}
+        </div>
+
+        {update && update.percent !== null && update.busy ? (
+          <div className="mt-2.5 h-1 w-full overflow-hidden rounded-full bg-black/10">
+            <div
+              className="h-full rounded-full bg-brand-600 transition-[width] duration-300"
+              style={{ width: `${Math.min(100, Math.max(0, update.percent))}%` }}
+            />
+          </div>
+        ) : null}
+
+        {update?.verified && update.phase !== "available" ? (
+          <p className="mt-2 text-[11px] text-[var(--color-tertiary-label)]">
+            Verified against {update.verified}.
+          </p>
+        ) : null}
+
+        {offered ? (
+          <div className="mt-2.5 flex items-center gap-3">
+            <button
+              type="button"
+              className="text-[11px] font-medium text-[var(--color-secondary-label)] hover:text-[var(--color-label)]"
+              onClick={() => onSkip(version)}
+            >
+              Skip this version
+            </button>
+            <button
+              type="button"
+              className="text-[11px] font-medium text-brand-600 hover:underline"
+              onClick={() => onOpenNotes(rel!.html_url)}
+            >
+              Release notes
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex items-center gap-3 rounded-[10px] bg-[var(--color-fill)] px-3 py-2.5">
+        <p className="min-w-0 flex-1 text-[13px] font-medium text-[var(--color-label)]">
+          Check for updates automatically
+        </p>
+        <Switch
+          label="Check for updates automatically"
+          checked={checksEnabled}
+          busy={savingSettings}
+          onChange={onToggleChecks}
+        />
+      </div>
+    </div>
+  );
+}
 
 function PathRow({ label, value, onOpen }: { label: string; value: string; onOpen: () => void }) {
   return (
@@ -27,9 +147,14 @@ export function SettingsPanel({
   liveFiles,
   settings,
   savingSettings,
+  update,
   onOpen,
   onToggleStartup,
   onOpenStartupSettings,
+  onInstallUpdate,
+  onSkipUpdate,
+  onToggleUpdateChecks,
+  onOpenExternal,
   onClose,
 }: {
   version: string;
@@ -38,9 +163,14 @@ export function SettingsPanel({
   liveFiles: string[];
   settings: AppSettings | null;
   savingSettings: boolean;
+  update: UpdateStatus | null;
   onOpen: (path: string) => void;
   onToggleStartup: (enabled: boolean) => void;
   onOpenStartupSettings: () => void;
+  onInstallUpdate: () => void;
+  onSkipUpdate: (version: string) => void;
+  onToggleUpdateChecks: (enabled: boolean) => void;
+  onOpenExternal: (url: string) => void;
   onClose: () => void;
 }) {
   const startupSupported = Boolean(settings?.autostart_supported);
@@ -56,6 +186,16 @@ export function SettingsPanel({
           </span>
           <span className="font-mono text-[11px]">{platform}</span>
         </div>
+
+        <UpdateSection
+          update={update}
+          checksEnabled={settings?.update_check_enabled ?? true}
+          savingSettings={savingSettings}
+          onInstall={onInstallUpdate}
+          onSkip={onSkipUpdate}
+          onOpenNotes={onOpenExternal}
+          onToggleChecks={onToggleUpdateChecks}
+        />
 
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Startup</p>
@@ -120,8 +260,9 @@ export function SettingsPanel({
         </div>
 
         <p className="text-xs leading-relaxed text-zinc-400">
-          Every switch backs up the file it is about to overwrite, keeping the ten most recent copies
-          per file.
+          A switch rewrites the file above from scratch, so it holds only the provider you picked —
+          anything else that was in it is removed. The previous version is copied into Backups
+          first, which keeps the ten most recent per file plus one permanent pre-0.5.0 copy.
         </p>
       </div>
     </Modal>

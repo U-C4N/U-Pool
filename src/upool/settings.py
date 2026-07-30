@@ -19,6 +19,12 @@ from .models import as_bool
 # :mod:`upool.autostart` and this is only the remembered intent.
 DEFAULTS: dict[str, Any] = {
     "launch_at_startup": False,
+    # Update checks. ``update_last_check`` throttles the GitHub call, and a
+    # skipped version is remembered so the badge stops nagging about it.
+    "update_check_enabled": True,
+    "update_last_check": 0,
+    "update_skipped_version": "",
+    "update_last_seen_version": "",
 }
 
 
@@ -32,6 +38,11 @@ def load() -> dict[str, Any]:
     if isinstance(raw, dict):
         data.update(raw)
     data["launch_at_startup"] = as_bool(data.get("launch_at_startup"))
+    data["update_check_enabled"] = as_bool(data.get("update_check_enabled"))
+    try:
+        data["update_last_check"] = int(data.get("update_last_check") or 0)
+    except (TypeError, ValueError):
+        data["update_last_check"] = 0
     return data
 
 

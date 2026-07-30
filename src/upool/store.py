@@ -1,8 +1,8 @@
 """Single source of truth for provider records.
 
 ``~/.u-pool/config.json`` holds every provider the user has defined. The live
-files under ``~/.claude`` and ``~/.codex`` are treated as *output*: they always
-show a projection of whichever provider is currently active. Nothing is ever
+files under ``~/.claude`` and ``~/.codex`` are treated as *output*: each switch
+rewrites them from scratch to show exactly the active provider. Nothing is ever
 read back out of them except on first run, when an existing setup is imported
 so it is not lost.
 """
@@ -222,10 +222,7 @@ class Store:
         with self._lock:
             provider = self.get(app, provider_id)
             validate(provider)
-            previous = self.find(app, self.current_id(app))
-            if previous is not None and previous.id == provider.id:
-                previous = None
-            result = adapters.get(app).apply(provider, previous)
+            result = adapters.get(app).apply(provider)
             self._slot(app)["current"] = provider.id
             self._save()
         return result

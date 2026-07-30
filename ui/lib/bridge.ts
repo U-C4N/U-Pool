@@ -10,6 +10,7 @@ import type {
   HealthResult,
   ProviderDetail,
   SwitchResult,
+  UpdateStatus,
 } from "./types";
 
 /** Uniform response envelope produced by every Python endpoint. */
@@ -94,4 +95,10 @@ export const backend = {
   setLaunchAtStartup: (enabled: boolean) =>
     call<AppSettings>("set_launch_at_startup", enabled),
   openStartupSettings: () => call<string>("open_startup_settings"),
+  updateStatus: () => call<UpdateStatus>("update_status"),
+  checkUpdates: (force = false) => call<UpdateStatus>("check_updates", force),
+  installUpdate: () => call<UpdateStatus>("install_update"),
+  skipUpdate: (version: string) => call<UpdateStatus>("skip_update", version),
+  setUpdateChecks: (enabled: boolean) => call<UpdateStatus>("set_update_checks", enabled),
+  quit: () => call<boolean>("quit"),
 };
