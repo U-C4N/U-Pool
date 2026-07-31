@@ -166,6 +166,23 @@ export const ClaudeGlyph = (p: IconProps) => (
   </svg>
 );
 
+/**
+ * The same starburst on a display. The frame does the work: at 14px in the
+ * segmented control the burst alone is indistinguishable from `ClaudeGlyph`,
+ * so it is drawn small and solid inside a stroked monitor rather than tapered.
+ */
+export const ClaudeDesktopGlyph = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="2" y="3.25" width="20" height="14" rx="2.4" />
+    <path d="M12 17.25v3.25M8.75 20.5h6.5" />
+    <path
+      fill="currentColor"
+      stroke="none"
+      d="M12 5.45 12.61 8.77 15.39 6.86 13.48 9.64 16.8 10.25 13.48 10.86 15.39 13.64 12.61 11.73 12 15.05 11.39 11.73 8.61 13.64 10.52 10.86 7.2 10.25 10.52 9.64 8.61 6.86 11.39 8.77Z"
+    />
+  </Svg>
+);
+
 /** Inline fallback if `/openai.svg` is unavailable. Prefer `OpenAILogo` from BrandMarks. */
 export const OpenAIGlyph = (p: IconProps) => (
   <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...p}>

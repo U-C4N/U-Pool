@@ -12,9 +12,11 @@ import type {
   AppSettings,
   AppState,
   Bootstrap,
+  EnvInfo,
   HealthResult,
   ProviderDetail,
   ReleaseInfo,
+  SwitchResult,
   UpdateStatus,
 } from "./types";
 
@@ -25,7 +27,72 @@ const fail = (error: string): Promise<Envelope<never>> => Promise.resolve({ ok: 
 
 const OFFICIAL_SITE: Record<AppId, string> = {
   claude: "https://www.anthropic.com/claude-code",
+  claude_desktop: "https://claude.ai/download",
   codex: "https://developers.openai.com/codex",
+};
+
+/** Claude Desktop is preview-only in 0.6.0, so its adapter reports no live files. */
+const FILES: Record<AppId, string[]> = {
+  claude: ["~/.claude/settings.json"],
+  claude_desktop: [],
+  codex: ["~/.codex/config.toml", "~/.codex/auth.json"],
+};
+
+type SwitchOutcome = Omit<SwitchResult, "state" | "files">;
+
+/** One canned outcome per app, so the switch toast has a sample of every kind of line. */
+const SWITCH_OUTCOME: Record<AppId, SwitchOutcome> = {
+  claude: {
+    backups: ["~/.claude/settings.json.backup"],
+    warnings: [],
+    removed: ["env.API_TIMEOUT_MS", "permissions.defaultMode"],
+    env_written: ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"],
+    env_removed: ["ANTHROPIC_API_KEY"],
+  },
+  claude_desktop: {
+    backups: [],
+    warnings: [
+      "Claude Desktop is preview-only in 0.6.0 — your choice was recorded, but no configuration was written.",
+    ],
+    removed: [],
+    env_written: [],
+    env_removed: [],
+  },
+  codex: {
+    backups: ["~/.codex/config.toml.backup", "~/.codex/auth.json.backup"],
+    warnings: [],
+    removed: ["model_providers.yunwu"],
+    env_written: ["codefast", "OPENAI_BASE_URL"],
+    env_removed: [],
+  },
+};
+
+const ANTHROPIC_ENV: EnvInfo = {
+  supported: true,
+  namespace: "anthropic",
+  vars: [
+    { name: "ANTHROPIC_BASE_URL", value_masked: "https://api.kimi.com/coding", owned: true },
+    { name: "ANTHROPIC_AUTH_TOKEN", value_masked: "sk-d******0000", owned: true },
+  ],
+};
+
+// Claude Code and Claude Desktop share one set of variable names, but only Claude
+// Code's adapter claims a namespace - the desktop one is preview-only and writes
+// nothing. So the real endpoint answers an empty namespace here, and the mock says
+// the same rather than showing a section the desktop app never renders.
+const MOCK_ENV: Record<AppId, EnvInfo> = {
+  claude: ANTHROPIC_ENV,
+  claude_desktop: { supported: false, namespace: "", vars: [] },
+  codex: {
+    supported: true,
+    namespace: "openai",
+    vars: [
+      { name: "codefast", value_masked: "sk-d******0000", owned: true },
+      { name: "OPENAI_BASE_URL", value_masked: "https://api.openai.com/v1", owned: true },
+      // Set by hand before U-Pool existed: listed, never deleted.
+      { name: "OPENAI_API_KEY", value_masked: "sk-p******9f21", owned: false },
+    ],
+  },
 };
 
 function seed(app: AppId, name: string, base: string, official = false): ProviderDetail {
@@ -62,6 +129,7 @@ const mockSettings: AppSettings = {
   autostart_command: "",
   autostart_detail: "Browser preview - the real switch needs the desktop app.",
   update_check_enabled: true,
+  backup_enabled: true,
 };
 
 const mockRelease: ReleaseInfo = {
@@ -94,7 +162,7 @@ const mockUpdate: UpdateStatus = {
   verified: "",
   skipped_version: "",
   last_check: Math.floor(Date.now() / 1000),
-  current_version: "0.5.0-mock",
+  current_version: "0.6.0-mock",
   installed_from: "",
   install_failed: "",
   busy: false,
@@ -108,6 +176,15 @@ const db: Record<AppId, { current: string; providers: ProviderDetail[] }> = {
       { ...seed("claude", "default", "https://api.kimi.com/coding"), id: "claude-default" },
     ],
   },
+  // A saved-but-inactive custom entry, because the preview notice is only worth
+  // looking at with something under it that U-Pool is not writing yet.
+  claude_desktop: {
+    current: "claude_desktop-claude-official",
+    providers: [
+      seed("claude_desktop", "Claude Official", "", true),
+      seed("claude_desktop", "Kimi relay", "https://api.kimi.com/coding"),
+    ],
+  },
   codex: {
     current: "codex-openai-official",
     providers: [seed("codex", "OpenAI Official", "", true)],
@@ -118,10 +195,7 @@ function state(app: AppId): AppState {
   const slot = db[app];
   return {
     current: slot.current,
-    files:
-      app === "claude"
-        ? ["~/.claude/settings.json"]
-        : ["~/.codex/config.toml", "~/.codex/auth.json"],
+    files: [...FILES[app]],
     providers: slot.providers.map((p) => {
       const { api_key, ...rest } = p;
       return {
@@ -139,13 +213,18 @@ const find = (app: AppId, id: string) => db[app].providers.find((p) => p.id === 
 export const mockApi = {
   bootstrap: () =>
     ok<Bootstrap>({
-      version: "0.5.0-mock",
+      version: "0.6.0-mock",
       platform: "browser",
       apps: [
         { id: "claude", label: "Claude Code" },
+        { id: "claude_desktop", label: "Claude Desktop" },
         { id: "codex", label: "Codex" },
       ],
-      state: { claude: state("claude"), codex: state("codex") },
+      state: {
+        claude: state("claude"),
+        claude_desktop: state("claude_desktop"),
+        codex: state("codex"),
+      },
       settings: mockSettings,
       update: { ...mockUpdate },
     }),
@@ -186,13 +265,8 @@ export const mockApi = {
   switch_provider: (app: AppId, id: string) => {
     if (!find(app, id)) return fail("That provider no longer exists.");
     db[app].current = id;
-    return ok({
-      state: state(app),
-      files: state(app).files,
-      backups: [],
-      warnings: [],
-      removed: app === "claude" ? ["hooks", "env.API_TIMEOUT_MS"] : ["model_providers.yunwu"],
-    });
+    const next = state(app);
+    return ok<SwitchResult>({ state: next, files: next.files, ...SWITCH_OUTCOME[app] });
   },
   test_provider: (app: AppId, id: string): Promise<Envelope<HealthResult>> => {
     const provider = find(app, id);
@@ -249,7 +323,13 @@ export const mockApi = {
     mockSettings.launch_at_startup = enabled;
     return ok<AppSettings>({ ...mockSettings });
   },
+  set_backup_enabled: (enabled: boolean) => {
+    mockSettings.backup_enabled = enabled;
+    return ok<AppSettings>({ ...mockSettings });
+  },
   open_startup_settings: () => fail("Launching at sign-in is wired up for Windows only."),
+  environment: (app: AppId) => ok<EnvInfo>({ ...MOCK_ENV[app], vars: [...MOCK_ENV[app].vars] }),
+  open_env_settings: () => fail("The Windows environment editor needs the desktop app."),
   update_status: () => {
     // Advance the fake download a step per poll, so the bar actually moves.
     if (mockUpdate.phase === "downloading") {

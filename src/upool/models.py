@@ -1,6 +1,6 @@
 """Provider records.
 
-One dataclass covers both target apps. Claude Code and Codex need different
+One dataclass covers every target app. Claude Code and Codex need different
 fields, but keeping a single shape means the store, the JS bridge and the UI
 all speak one language; each adapter reads only the fields it cares about.
 """
@@ -14,8 +14,13 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 APP_CLAUDE = "claude"
+# Its own app id rather than a flavour of ``claude``: it gets its own tab, its
+# own provider list and its own active choice. What it shares with Claude Code
+# is the Anthropic environment variables, and those are keyed by namespace.
+APP_CLAUDE_DESKTOP = "claude_desktop"
 APP_CODEX = "codex"
-SUPPORTED_APPS = (APP_CLAUDE, APP_CODEX)
+# Order is tab order in the UI.
+SUPPORTED_APPS = (APP_CLAUDE, APP_CLAUDE_DESKTOP, APP_CODEX)
 
 # Claude Code accepts either a bearer token or the classic x-api-key header;
 # which one a relay wants is the single most common setup mistake, so it is an
@@ -148,7 +153,9 @@ def validate(provider: Provider) -> None:
         raise UPoolError("Request URL is required.")
     if not provider.base_url.startswith(("http://", "https://")):
         raise UPoolError("Request URL must start with http:// or https://.")
-    if provider.app == APP_CLAUDE and provider.auth_style not in (AUTH_TOKEN, AUTH_API_KEY):
+    # Claude Desktop takes the same record as Claude Code, so it takes the same check.
+    claude_app = provider.app in (APP_CLAUDE, APP_CLAUDE_DESKTOP)
+    if claude_app and provider.auth_style not in (AUTH_TOKEN, AUTH_API_KEY):
         raise UPoolError(f"Unknown auth style '{provider.auth_style}'.")
     if provider.app == APP_CODEX:
         if provider.wire_api not in (WIRE_RESPONSES, WIRE_CHAT):

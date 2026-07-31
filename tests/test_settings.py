@@ -9,11 +9,18 @@ def test_defaults_apply_when_nothing_has_been_saved():
     paths.settings_file().unlink()
     assert settings.load() == {
         "launch_at_startup": False,
+        "backup_enabled": True,
         "update_check_enabled": True,
         "update_last_check": 0,
         "update_skipped_version": "",
         "update_last_seen_version": "",
     }
+
+
+def test_the_backup_switch_round_trips():
+    assert settings.load()["backup_enabled"] is True
+    assert settings.update({"backup_enabled": False})["backup_enabled"] is False
+    assert settings.load()["backup_enabled"] is False
 
 
 def test_a_hand_edited_last_check_that_is_not_a_number_reads_as_zero():
@@ -40,3 +47,7 @@ def test_a_string_flag_from_a_hand_edit_is_read_as_a_boolean():
     assert settings.load()["launch_at_startup"] is True
     atomicio.write_json(paths.settings_file(), {"launch_at_startup": "false"})
     assert settings.load()["launch_at_startup"] is False
+    # Backups decide whether a file is copied before it is overwritten, so the
+    # string form has to read as a boolean here too rather than as truthiness.
+    atomicio.write_json(paths.settings_file(), {"backup_enabled": "false"})
+    assert settings.load()["backup_enabled"] is False

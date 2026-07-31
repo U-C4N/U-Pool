@@ -7,6 +7,7 @@ import type {
   AppSettings,
   AppState,
   Bootstrap,
+  EnvInfo,
   HealthResult,
   ProviderDetail,
   SwitchResult,
@@ -94,7 +95,10 @@ export const backend = {
   getSettings: () => call<AppSettings>("get_settings"),
   setLaunchAtStartup: (enabled: boolean) =>
     call<AppSettings>("set_launch_at_startup", enabled),
+  setBackupEnabled: (enabled: boolean) => call<AppSettings>("set_backup_enabled", enabled),
   openStartupSettings: () => call<string>("open_startup_settings"),
+  environment: (app: AppId) => call<EnvInfo>("environment", app),
+  openEnvSettings: () => call<string>("open_env_settings"),
   updateStatus: () => call<UpdateStatus>("update_status"),
   checkUpdates: (force = false) => call<UpdateStatus>("check_updates", force),
   installUpdate: () => call<UpdateStatus>("install_update"),

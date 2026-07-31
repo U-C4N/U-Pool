@@ -14,6 +14,7 @@ import type {
   AppPaths,
   AppSettings,
   AppState,
+  EnvInfo,
   HealthResult,
   ProviderDetail,
   ProviderSummary,
@@ -28,18 +29,29 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** The toast keeps one line of detail, so a long list of names becomes a count. */
+function shortList(names: string[], limit = 3): string {
+  return names.length <= limit
+    ? names.join(", ")
+    : `${names.slice(0, limit).join(", ")} +${names.length - limit} more`;
+}
+
 export default function Page() {
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [app, setApp] = useState<AppId>("claude");
   const [states, setStates] = useState<Partial<Record<AppId, AppState>>>({});
   const [health, setHealth] = useState<Record<string, HealthResult>>({});
   const [view, setView] = useState<View>({ mode: "list" });
+  // Counts presses of +, so a second one on an already-open add form starts over.
+  // The form key alone cannot tell two visits to a blank form apart.
+  const [addSeq, setAddSeq] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ProviderSummary | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [env, setEnv] = useState<EnvInfo | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
   // Generation counter so a slow settings read cannot land on top of a newer write.
   const settingsRead = useRef(0);
@@ -108,12 +120,21 @@ export default function Page() {
         push("error", `Switched to ${provider.name}`, result.warnings.join(" "));
         return;
       }
-      // A switch rewrites the file whole, so say what that cost when it cost
-      // something. The backup is one click away in Settings.
-      const detail =
-        result.removed.length > 0
-          ? `${result.files.join("  •  ")} — rewritten from scratch; removed ${result.removed.join(", ")}`
-          : result.files.join("  •  ");
+      // The registry is a second write target, so a file list on its own no
+      // longer describes the switch. Say what moved, capped so it stays one line.
+      const envDetail = [
+        result.env_written.length > 0 ? `set ${shortList(result.env_written)}` : "",
+        result.env_removed.length > 0 ? `cleared ${shortList(result.env_removed)}` : "",
+      ]
+        .filter(Boolean)
+        .join("; ");
+      const detail = [
+        result.files.join("  •  "),
+        envDetail ? `environment ${envDetail}` : "",
+        result.removed.length > 0 ? `dropped ${shortList(result.removed)}` : "",
+      ]
+        .filter(Boolean)
+        .join(" — ");
       push("success", `${provider.name} is now in use`, detail);
     },
     [app, apply, push, run],
@@ -150,6 +171,11 @@ export default function Page() {
       setTesting(false);
     }
   }, [app, push]);
+
+  const handleAdd = useCallback(() => {
+    setAddSeq((seq) => seq + 1);
+    setView({ mode: "form", provider: null });
+  }, []);
 
   const handleEdit = useCallback(
     async (provider: ProviderSummary) => {
@@ -235,8 +261,34 @@ export default function Page() {
     [push],
   );
 
+  const handleToggleBackups = useCallback(
+    async (enabled: boolean) => {
+      setSavingSettings(true);
+      settingsRead.current += 1;
+      try {
+        setSettings(await backend.setBackupEnabled(enabled));
+        push(
+          "success",
+          enabled ? "Backups are on" : "Backups are off",
+          enabled
+            ? "A .backup copy is kept beside every file U-Pool writes."
+            : "Nothing is copied before a switch overwrites a file.",
+        );
+      } catch (error) {
+        push("error", message(error));
+      } finally {
+        setSavingSettings(false);
+      }
+    },
+    [push],
+  );
+
   const openStartupSettings = useCallback(() => {
     backend.openStartupSettings().catch((error) => push("error", message(error)));
+  }, [push]);
+
+  const openEnvSettings = useCallback(() => {
+    backend.openEnvSettings().catch((error) => push("error", message(error)));
   }, [push]);
 
   const openSettings = useCallback(() => {
@@ -249,6 +301,20 @@ export default function Page() {
       .catch(() => undefined);
     backend.checkUpdates(false).then(setUpdate).catch(() => undefined);
   }, []);
+
+  // The registry is only read while the panel that shows it is open, and again
+  // if the active app changes underneath it.
+  useEffect(() => {
+    if (!settingsOpen) return;
+    let cancelled = false;
+    backend
+      .environment(app)
+      .then((next) => !cancelled && setEnv(next))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [app, settingsOpen]);
 
   // Only poll while the backend is actually working; the rest of the time the
   // snapshot cannot change without us asking for it.
@@ -351,11 +417,12 @@ export default function Page() {
           setApp(next);
           setView({ mode: "list" });
         }}
-        onAdd={() => setView({ mode: "form", provider: null })}
+        onAdd={handleAdd}
         onTestAll={handleTestAll}
         onOpenFolder={() => state.files[0] && openPath(state.files[0])}
         onOpenSettings={openSettings}
         testing={testing}
+        canOpenFolder={state.files.length > 0}
         updateAvailable={
           update?.phase === "available" &&
           Boolean(update.release) &&
@@ -379,6 +446,14 @@ export default function Page() {
               Select a row to make it active for {appLabel}.
             </p>
           </div>
+          {app === "claude_desktop" ? (
+            <p className="mb-3 px-1">
+              <span className="liquid-pill block rounded-[18px] px-3.5 py-2 text-[12px] font-medium leading-relaxed text-amber-900/80">
+                Preview — U-Pool does not write Claude Desktop&apos;s configuration yet. Providers
+                you add here are saved and will apply once support lands.
+              </span>
+            </p>
+          ) : null}
           <ProviderList
             providers={state.providers}
             health={health}
@@ -388,9 +463,12 @@ export default function Page() {
           />
         </div>
       ) : (
+        // Keyed, so the draft cannot survive from one provider to the next.
         <ProviderForm
+          key={view.provider?.id ?? `new-${addSeq}`}
           app={app}
           appLabel={appLabel}
+          mode={view.provider ? "edit" : "add"}
           initial={view.provider}
           saving={saving}
           onCancel={() => setView({ mode: "list" })}
@@ -422,11 +500,14 @@ export default function Page() {
           paths={paths}
           liveFiles={state.files}
           settings={settings}
+          env={env}
           savingSettings={savingSettings}
           update={update}
           onOpen={openPath}
           onToggleStartup={handleToggleStartup}
           onOpenStartupSettings={openStartupSettings}
+          onToggleBackups={handleToggleBackups}
+          onOpenEnvSettings={openEnvSettings}
           onInstallUpdate={handleInstallUpdate}
           onSkipUpdate={handleSkipUpdate}
           onToggleUpdateChecks={handleToggleUpdateChecks}

@@ -4,8 +4,16 @@ import json
 
 import pytest
 
-from upool import paths
-from upool.models import APP_CLAUDE, APP_CODEX, Provider, UPoolError
+from upool import atomicio, paths
+from upool.adapters.claude_desktop import PREVIEW_WARNING
+from upool.models import (
+    APP_CLAUDE,
+    APP_CLAUDE_DESKTOP,
+    APP_CODEX,
+    SUPPORTED_APPS,
+    Provider,
+    UPoolError,
+)
 from upool.store import Store
 
 
@@ -20,12 +28,55 @@ def make(app=APP_CLAUDE, **kwargs) -> Provider:
 
 
 def test_bootstrap_seeds_official_entry_per_app(store):
-    for app in (APP_CLAUDE, APP_CODEX):
+    for app in SUPPORTED_APPS:
         providers = store.list_providers(app)
-        assert len(providers) == 1
+        assert len(providers) == 1, app
         assert providers[0].official
         assert store.current_id(app) == providers[0].id
     assert paths.config_file().exists()
+
+
+def test_a_config_written_by_0_5_0_gains_the_claude_desktop_slot():
+    # Two app slots and no third: the shape every 0.5.0 install has on disk.
+    atomicio.write_json(
+        paths.config_file(),
+        {
+            "version": 1,
+            "apps": {
+                APP_CLAUDE: {
+                    "current": "abc",
+                    "providers": [
+                        {
+                            "id": "abc",
+                            "app": APP_CLAUDE,
+                            "name": "Relay",
+                            "base_url": "https://relay.example.com",
+                        }
+                    ],
+                },
+                APP_CODEX: {"current": "", "providers": []},
+            },
+        },
+    )
+    store = Store()
+
+    assert [p.name for p in store.list_providers(APP_CLAUDE)] == ["Relay"]
+    assert store.current_id(APP_CLAUDE) == "abc"
+    assert store.list_providers(APP_CLAUDE_DESKTOP) == []
+    assert store.current_id(APP_CLAUDE_DESKTOP) == ""
+
+
+def test_switching_claude_desktop_records_the_choice_and_writes_nothing(store, sandbox):
+    provider = store.add(make(app=APP_CLAUDE_DESKTOP))
+    result = store.switch(APP_CLAUDE_DESKTOP, provider.id)
+
+    assert store.current_id(APP_CLAUDE_DESKTOP) == provider.id
+    assert result.files == []
+    assert result.env_written == []
+    assert result.warnings == [PREVIEW_WARNING]
+    # Nothing at all under the home directory: no ~/.claude, and above all no
+    # %APPDATA%\Claude\claude_desktop_config.json.
+    assert list(sandbox.iterdir()) == []
 
 
 def test_bootstrap_imports_existing_claude_setup(sandbox):

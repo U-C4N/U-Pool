@@ -1,6 +1,31 @@
 from __future__ import annotations
 
-from upool.models import APP_CLAUDE, Provider, as_bool, slugify
+import pytest
+
+from upool.models import (
+    APP_CLAUDE,
+    APP_CLAUDE_DESKTOP,
+    APP_CODEX,
+    AUTH_API_KEY,
+    SUPPORTED_APPS,
+    Provider,
+    UPoolError,
+    as_bool,
+    slugify,
+    validate,
+)
+
+
+def test_the_three_apps_are_declared_in_tab_order():
+    assert SUPPORTED_APPS == (APP_CLAUDE, APP_CLAUDE_DESKTOP, APP_CODEX)
+
+
+def test_claude_desktop_is_validated_exactly_like_claude_code():
+    draft = {"name": "Relay", "base_url": "https://relay.example.com"}
+    # No assertion: the record taking the same shape is the point.
+    validate(Provider(app=APP_CLAUDE_DESKTOP, auth_style=AUTH_API_KEY, **draft))
+    with pytest.raises(UPoolError, match="auth style"):
+        validate(Provider(app=APP_CLAUDE_DESKTOP, auth_style="basic", **draft))
 
 
 def test_toggles_default_to_off():

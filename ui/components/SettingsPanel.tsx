@@ -1,6 +1,6 @@
 "use client";
 
-import type { AppPaths, AppSettings, UpdateStatus } from "@/lib/types";
+import type { AppPaths, AppSettings, EnvInfo, UpdateStatus } from "@/lib/types";
 import { DownloadIcon, FolderIcon } from "./icons";
 import { Button, IconButton, Modal, Switch } from "./ui";
 
@@ -124,6 +124,28 @@ function UpdateSection({
   );
 }
 
+/**
+ * One managed registry value. `owned` is the interesting bit: a name U-Pool did
+ * not set is shown so the list matches the registry, but it survives a switch.
+ */
+function EnvRow({ name, value, owned }: { name: string; value: string; owned: boolean }) {
+  return (
+    <div className="flex items-center gap-3 rounded-[10px] bg-[var(--color-fill)] px-3 py-2.5">
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-mono text-[12px] font-medium text-[var(--color-label)]">{name}</p>
+        <p className="truncate font-mono text-[11px] text-[var(--color-secondary-label)]" title={value}>
+          {value || "—"}
+        </p>
+      </div>
+      {owned ? null : (
+        <span className="shrink-0 rounded-full bg-white/50 px-2 py-0.5 text-[10px] font-medium text-[var(--color-secondary-label)]">
+          set outside U-Pool
+        </span>
+      )}
+    </div>
+  );
+}
+
 function PathRow({ label, value, onOpen }: { label: string; value: string; onOpen: () => void }) {
   return (
     <div className="flex items-center gap-3 rounded-[10px] bg-[var(--color-fill)] px-3 py-2.5">
@@ -148,9 +170,12 @@ export function SettingsPanel({
   settings,
   savingSettings,
   update,
+  env,
   onOpen,
   onToggleStartup,
   onOpenStartupSettings,
+  onToggleBackups,
+  onOpenEnvSettings,
   onInstallUpdate,
   onSkipUpdate,
   onToggleUpdateChecks,
@@ -164,9 +189,13 @@ export function SettingsPanel({
   settings: AppSettings | null;
   savingSettings: boolean;
   update: UpdateStatus | null;
+  /** The registry side of the active app's config; null until it has been read. */
+  env: EnvInfo | null;
   onOpen: (path: string) => void;
   onToggleStartup: (enabled: boolean) => void;
   onOpenStartupSettings: () => void;
+  onToggleBackups: (enabled: boolean) => void;
+  onOpenEnvSettings: () => void;
   onInstallUpdate: () => void;
   onSkipUpdate: (version: string) => void;
   onToggleUpdateChecks: (enabled: boolean) => void;
@@ -238,12 +267,40 @@ export function SettingsPanel({
         </div>
 
         <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Backups</p>
+          <div className="flex items-center gap-3 rounded-[10px] bg-[var(--color-fill)] px-3 py-2.5">
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium text-[var(--color-label)]">
+                Keep a copy of every file U-Pool changes
+              </p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--color-secondary-label)]">
+                One copy beside the original, overwritten on every change —
+                ~/.claude/settings.json.backup, ~/.codex/config.toml.backup,
+                ~/.codex/auth.json.backup. Nothing is written while this is off.
+              </p>
+            </div>
+            <Switch
+              label="Keep a copy of every file U-Pool changes"
+              checked={Boolean(settings?.backup_enabled)}
+              busy={savingSettings}
+              onChange={onToggleBackups}
+            />
+          </div>
+          {paths ? (
+            <PathRow
+              label="Registry snapshot folder"
+              value={paths.backups}
+              onOpen={() => onOpen(paths.backups)}
+            />
+          ) : null}
+        </div>
+
+        <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">U-Pool data</p>
           {paths ? (
             <>
               <PathRow label="Provider store" value={paths.config} onOpen={() => onOpen(paths.config)} />
               <PathRow label="Preferences" value={paths.settings} onOpen={() => onOpen(paths.settings)} />
-              <PathRow label="Backups" value={paths.backups} onOpen={() => onOpen(paths.backups)} />
             </>
           ) : (
             <p className="text-xs text-zinc-400">Loading...</p>
@@ -254,15 +311,59 @@ export function SettingsPanel({
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
             Live config for this app
           </p>
-          {liveFiles.map((file) => (
-            <PathRow key={file} label="Written on switch" value={file} onOpen={() => onOpen(file)} />
-          ))}
+          {liveFiles.length > 0 ? (
+            liveFiles.map((file) => (
+              <PathRow key={file} label="Written on switch" value={file} onOpen={() => onOpen(file)} />
+            ))
+          ) : (
+            <p className="text-xs text-zinc-400">U-Pool does not write a file for this app yet.</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+            Windows environment
+          </p>
+          {!env ? (
+            <p className="text-xs text-zinc-400">Loading...</p>
+          ) : !env.namespace ? (
+            // An app with no namespace reports supported=false whatever the OS is,
+            // so this has to come first - otherwise Claude Desktop tells a Windows
+            // user that environment variables are a Windows-only feature.
+            <p className="text-xs text-zinc-400">
+              U-Pool does not set environment variables for this app yet.
+            </p>
+          ) : !env.supported ? (
+            <p className="text-xs text-zinc-400">
+              Environment variables are wired up for Windows only.
+            </p>
+          ) : (
+            <>
+              {env.vars.length > 0 ? (
+                env.vars.map((entry) => (
+                  <EnvRow
+                    key={entry.name}
+                    name={entry.name}
+                    value={entry.value_masked}
+                    owned={entry.owned}
+                  />
+                ))
+              ) : (
+                <p className="text-xs text-zinc-400">
+                  Nothing set yet — the next switch writes what this app needs.
+                </p>
+              )}
+              <Button className="h-8 px-3 text-xs" onClick={onOpenEnvSettings}>
+                Open Windows environment variables
+              </Button>
+            </>
+          )}
         </div>
 
         <p className="text-xs leading-relaxed text-zinc-400">
-          A switch rewrites the file above from scratch, so it holds only the provider you picked —
-          anything else that was in it is removed. The previous version is copied into Backups
-          first, which keeps the ten most recent per file plus one permanent pre-0.5.0 copy.
+          A switch changes only the keys U-Pool owns — plugins, theme, MCP servers, project trust
+          and everything else in the file stay as they are. It also sets the Windows environment
+          variables the CLIs read, because a file alone does not reach them.
         </p>
       </div>
     </Modal>

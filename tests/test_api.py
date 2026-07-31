@@ -4,9 +4,16 @@ import json
 import sys
 from pathlib import Path
 
-from upool import autostart, settings
+import pytest
+
+from upool import autostart, paths, settings, winenv
+from upool.adapters.claude_desktop import PREVIEW_WARNING
 from upool.api import Api
-from upool.models import APP_CLAUDE, APP_CODEX
+from upool.models import APP_CLAUDE, APP_CLAUDE_DESKTOP, APP_CODEX
+
+windows_only = pytest.mark.skipif(
+    sys.platform != "win32", reason="the environment key only exists on Windows"
+)
 
 
 def draft(**kwargs) -> dict:
@@ -20,10 +27,11 @@ def draft(**kwargs) -> dict:
     return payload
 
 
-def test_bootstrap_returns_both_apps():
+def test_bootstrap_returns_every_app_in_tab_order():
     data = Api().bootstrap()["data"]
-    assert [app["id"] for app in data["apps"]] == [APP_CLAUDE, APP_CODEX]
-    assert set(data["state"]) == {APP_CLAUDE, APP_CODEX}
+    assert [app["id"] for app in data["apps"]] == [APP_CLAUDE, APP_CLAUDE_DESKTOP, APP_CODEX]
+    assert [app["label"] for app in data["apps"]] == ["Claude Code", "Claude Desktop", "Codex"]
+    assert set(data["state"]) == {APP_CLAUDE, APP_CLAUDE_DESKTOP, APP_CODEX}
     assert data["state"][APP_CLAUDE]["providers"][0]["official"] is True
 
 
@@ -73,16 +81,85 @@ def test_switch_reports_the_files_it_wrote(sandbox):
 
 def test_switch_surfaces_adapter_warnings():
     api = Api()
-    created = api.save_provider(
-        draft(app=APP_CODEX, name="Custom", env_key="RELAY_API_KEY")
-    )["data"]["id"]
-    result = api.switch_provider(APP_CODEX, created)["data"]
-    assert any("RELAY_API_KEY" in warning for warning in result["warnings"])
+    created = api.save_provider(draft(app=APP_CLAUDE_DESKTOP, name="Desktop Relay"))["data"]["id"]
+    result = api.switch_provider(APP_CLAUDE_DESKTOP, created)["data"]
+
+    assert result["warnings"] == [PREVIEW_WARNING]
+    assert result["files"] == []
+    assert result["env_written"] == []
+    assert result["state"]["current"] == created
+
+
+@windows_only
+def test_switch_reports_the_environment_names_it_changed():
+    api = Api()
+    relay = api.save_provider(draft())["data"]["id"]
+    official = api.list_providers(APP_CLAUDE)["data"]["providers"][0]["id"]
+
+    written = api.switch_provider(APP_CLAUDE, relay)["data"]
+    assert set(written["env_written"]) == {"ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"}
+    assert written["env_removed"] == []
+
+    cleared = api.switch_provider(APP_CLAUDE, official)["data"]
+    assert cleared["env_written"] == []
+    assert set(cleared["env_removed"]) == {"ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"}
+
+
+def test_environment_lists_the_names_the_active_provider_manages():
+    api = Api()
+    created = api.save_provider(draft())["data"]["id"]
+    api.switch_provider(APP_CLAUDE, created)
+    info = api.environment(APP_CLAUDE)["data"]
+
+    assert info["namespace"] == "anthropic"
+    assert [v["name"] for v in info["vars"]] == ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"]
+    assert info["supported"] is (sys.platform == "win32")
+
+
+def test_environment_says_claude_desktop_manages_nothing():
+    assert Api().environment(APP_CLAUDE_DESKTOP)["data"] == {
+        "supported": False,
+        "namespace": "",
+        "vars": [],
+    }
+
+
+@windows_only
+def test_environment_masks_the_value_it_found():
+    api = Api()
+    created = api.save_provider(draft())["data"]["id"]
+    api.switch_provider(APP_CLAUDE, created)
+    token = [
+        v for v in api.environment(APP_CLAUDE)["data"]["vars"] if v["name"] == "ANTHROPIC_AUTH_TOKEN"
+    ][0]
+
+    # The panel has to show that a variable is set, not what it holds.
+    assert token["value_masked"] == "sk-s******1234"
+    assert token["owned"] is True
+
+
+@windows_only
+def test_a_variable_u_pool_has_no_record_of_writing_is_flagged_as_someone_elses():
+    api = Api()
+    created = api.save_provider(draft())["data"]["id"]
+    api.switch_provider(APP_CLAUDE, created)
+    # The same values, no record of having written them: what a reinstall finds
+    # on a machine where the variables are already set.
+    paths.env_owned_file().unlink()
+
+    assert [v["owned"] for v in api.environment(APP_CLAUDE)["data"]["vars"]] == [False, False]
+
+
+def test_open_env_settings_is_refused_off_windows(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert Api().open_env_settings() == {"ok": False, "error": winenv.UNSUPPORTED_NOTE}
 
 
 def test_read_live_config_lists_every_managed_file():
     files = Api().read_live_config(APP_CODEX)["data"]
     assert [Path(f["path"]).name for f in files] == ["config.toml", "auth.json"]
+    # Claude Desktop has no live file, so the panel has nothing to offer for it.
+    assert Api().read_live_config(APP_CLAUDE_DESKTOP)["data"] == []
 
 
 def test_test_provider_skips_official_entries():
@@ -136,10 +213,31 @@ def test_settings_expose_the_startup_switch():
         "autostart_blocked",
         "autostart_command",
         "autostart_detail",
+        "backup_enabled",
         "update_check_enabled",
     }
     assert data["launch_at_startup"] is False
     assert data["autostart_supported"] is (sys.platform == "win32")
+
+
+def test_the_backup_switch_round_trips():
+    api = Api()
+    assert api.get_settings()["data"]["backup_enabled"] is True
+    assert api.set_backup_enabled(False)["data"]["backup_enabled"] is False
+    assert settings.load()["backup_enabled"] is False
+    # The bridge sends whatever the checkbox had, so a string is still an answer.
+    assert api.set_backup_enabled("true")["data"]["backup_enabled"] is True
+
+
+def test_switching_with_backups_off_writes_the_file_and_no_copy(sandbox):
+    api = Api()
+    api.set_backup_enabled(False)
+    created = api.save_provider(draft())["data"]["id"]
+    result = api.switch_provider(APP_CLAUDE, created)["data"]
+
+    assert result["backups"] == []
+    assert (sandbox / ".claude" / "settings.json").exists()
+    assert not (sandbox / ".claude" / "settings.json.backup").exists()
 
 
 def test_bootstrap_carries_the_settings():

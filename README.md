@@ -10,7 +10,7 @@ Python backend · Next.js UI · native OS webview — no Electron, no Node at ru
   <a href="https://github.com/U-C4N/U-Pool/stargazers"><img src="https://img.shields.io/github/stars/U-C4N/U-Pool?style=for-the-badge&logo=github&color=007aff" alt="Stars" /></a>
   <a href="https://github.com/U-C4N/U-Pool/network/members"><img src="https://img.shields.io/github/forks/U-C4N/U-Pool?style=for-the-badge&logo=github&color=0a84ff" alt="Forks" /></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+" />
-  <img src="https://img.shields.io/badge/version-0.5.0-informational?style=for-the-badge" alt="Version 0.5.0" />
+  <img src="https://img.shields.io/badge/version-0.6.0-informational?style=for-the-badge" alt="Version 0.6.0" />
 </p>
 
 ## Screenshot
@@ -26,48 +26,80 @@ Python backend · Next.js UI · native OS webview — no Electron, no Node at ru
 Switching between Anthropic, OpenRouter, DeepSeek, Azure, xAI, and custom relays usually means editing config files by hand. U-Pool turns that into a desktop app:
 
 - One list of providers for **Claude Code** and **Codex**
-- One click to make a provider live
+- One click to make a provider live — in the config file *and* in the Windows environment the CLIs read
 - Health checks that measure latency without spending tokens
-- Atomic writes and rolling backups so a bad switch never bricks your setup
+- Atomic writes, and a backup beside every file U-Pool changes
 
 ## Features
 
 | | |
 | --- | --- |
-| **Clean writes** | Every switch rebuilds the config file from the provider you picked — no leftovers from the last one |
+| **Surgical writes** | A switch changes only the keys U-Pool owns — plugins, theme, hooks, MCP servers and project trust stay where they are |
+| **Windows environment** | The variables the CLIs actually read are set in `HKCU\Environment` too, and only names U-Pool set are ever deleted |
 | **Atomic writes** | Temp file + `os.replace`; crash mid-write cannot leave half-written config |
-| **Rolling backups** | Every overwrite lands in `~/.u-pool/backups/<app>/` (10 deep), plus one permanent pre-0.5.0 copy |
+| **Backups** | One copy beside the original — `settings.json.backup` — refreshed on every change, switchable off in Settings |
 | **First-run import** | Existing Claude / Codex config becomes a provider instead of being overwritten |
 | **Reachability probe** | Plain `GET /models` — latency only, no completions, no token cost |
 | **Presets** | CodeFast, Yunwu, DeepSeek, Kimi, OpenRouter, MiniMax, Z.ai, Azure, xAI, Custom, and more |
 | **Official mode** | Hand control back to vendor login by clearing U-Pool-managed keys |
 | **Permission switches** | Per-provider checkboxes for bypass mode, auto-accept edits, project MCP trust, Codex approvals/sandbox and live web search |
+| **Claude Desktop** | A third tab, preview only — providers you add there are saved, nothing is written yet |
 | **In-app updates** | Settings shows a pulsing Update button when a newer release is out, downloads it and swaps itself |
 | **Launch at sign-in** | Windows on/off switch — one `HKCU\...\Run` entry, removed again when you turn it off |
 
 ## How it works
 
-`~/.u-pool/config.json` is the source of truth. The files the CLIs read are treated as **output**: on every switch U-Pool backs them up and then writes them **from scratch**, so afterwards they hold exactly the provider you picked and nothing else.
+`~/.u-pool/config.json` is the source of truth. On every switch U-Pool changes only the keys it owns in each target and leaves the rest of the file as it found it. The files are not the whole story: the CLIs also read variables straight out of the Windows environment, so a switch writes there too.
 
-| App | File | What a switch writes |
+| App | Target | What a switch writes |
 | --- | --- | --- |
 | Claude Code | `~/.claude/settings.json` | `env` block: base URL, auth token / API key, models, extras |
 | Claude Code | `~/.claude/settings.json` | Only while a checkbox is ticked: `permissions.defaultMode`, `permissions.skipDangerousModePermissionPrompt`, `enableAllProjectMcpServers` |
+| Claude Code | `HKCU\Environment` | The same names again: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` *or* `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL`, extras |
+| Claude Desktop | — | Nothing yet. The provider is saved and marked current, and you get a notice saying so |
 | Codex | `~/.codex/config.toml` | `model_provider`, `model`, one `[model_providers.<slug>]` table |
 | Codex | `~/.codex/config.toml` | Only while a checkbox is ticked: `approval_policy`, `sandbox_mode`, `web_search` |
-| Codex | `~/.codex/auth.json` | `OPENAI_API_KEY` only — merged, so ChatGPT login tokens are preserved |
+| Codex | `~/.codex/auth.json` | Written from scratch: `{"OPENAI_API_KEY": "…"}` when that is the provider's env key, otherwise `{}` |
+| Codex | `HKCU\Environment` | Whatever the provider's `env_key` is named, plus `OPENAI_BASE_URL` |
 
-### Why from scratch
+### What a switch leaves alone
 
-Up to 0.4.0 a switch merged: it swapped the keys U-Pool recognised and wrote everything else back. That meant a previous provider's variables could sit next to the new one's — an orphan `[model_providers.*]` table, a stale `ANTHROPIC_AUTH_TOKEN`, a leftover `preferred_auth_method` — and the CLI would read the two as one contradictory configuration.
+0.5.0 rebuilt `~/.claude/settings.json` and `~/.codex/config.toml` from the provider record alone. That did stop the pile-up it was aimed at — an orphan `[model_providers.*]` table, a stale `ANTHROPIC_AUTH_TOKEN` sitting beside the new one — but it also took everything else in those files with it.
 
-Since 0.5.0 U-Pool owns those two files outright. The trade-off is explicit: **anything else in them is removed**, including `hooks`, `statusLine`, `permissions.allow` / `deny`, `[mcp_servers.*]` and your comments. `~/.codex/auth.json` is the one exception — it is a credential store, not a provider config, so only `OPENAI_API_KEY` is touched there.
+Since 0.6.0 the write is surgical: U-Pool reads the file, replaces the handful of keys it owns, and puts the rest back untouched. `enabledPlugins`, `extraKnownMarketplaces`, `theme`, `effortLevel`, `model`, `hooks`, `statusLine` and `permissions.allow` / `deny` survive a Claude Code switch. `[mcp_servers.*]`, `[plugins.*]`, `[projects.*]` trust levels, `notify`, `[windows]`, `[features]`, `[shell_environment_policy]` and your comments survive a Codex switch — a key whose value has not changed is not even re-rendered, so its trailing comment stays put.
 
-Nothing is lost silently. The toast after a switch names what went away, the previous version is copied into `~/.u-pool/backups/<app>/`, and the very first clean write also keeps a permanent `*.pre-0.5.0.keep` copy that the ten-deep rotation never prunes.
+Two things are still owned **whole**, because that is exactly where the pile-up happened:
+
+- the `env` block in `settings.json` — rebuilt from the provider every switch, removed entirely for an official one
+- `[model_providers]` in `config.toml` — only the active provider's table survives; the others are dropped and named in the toast
+
+`~/.codex/auth.json` is written from scratch, because merging is what let a key an older build wrote sit there for months. If the file holds a ChatGPT login instead of an API key, the whole original is copied to `~/.u-pool/codex-login.json` first and restored verbatim when you switch back to the official provider.
+
+A file that will not parse stops the switch instead of being overwritten: preserving what U-Pool did not write means reading it first.
+
+### Windows environment
+
+Codex resolves its key by name — `config.toml` says `env_key = "codefast"` and Codex then looks for `codefast` in its process environment, which no file U-Pool writes can supply. Claude Desktop and any shell you open are in the same position. So a switch also writes `HKCU\Environment` and broadcasts `WM_SETTINGCHANGE`, so a program started afterwards sees the change without a sign-out.
+
+U-Pool records the names it sets in `~/.u-pool/env-owned.json` and **deletes only those**. A variable you set by hand is never removed. If a name U-Pool needs already exists it takes that name over, and the value it replaced goes to the backup first. Switching to the official provider clears the whole namespace U-Pool claimed and nothing else.
+
+**Settings → Windows environment** lists what is managed for the current app with masked values, marks anything set outside U-Pool, and opens the Windows editor. Off Windows the whole feature is inert.
+
+### Backups
+
+Every file U-Pool is about to change is copied once, beside the original, as `<filename>.backup` — `settings.json.backup`, `config.toml.backup`, `auth.json.backup`. One current copy, overwritten each time, not a history. Registry values cannot sit beside anything, so their pre-change values go to `~/.u-pool/backups/environment.backup.json`, where a `null` means the name did not exist.
+
+The switch in **Settings → Backups** turns it off, and with it off nothing is written at all. There is no restore screen: the copies are plain files, and putting one back is a rename.
+
+### Claude Desktop
+
+Claude Desktop is a third tab in 0.6.0 and **writes nothing**. Providers you add there are saved and can be made current, and a notice above the list says the configuration was not written.
+
+The reason it is preview rather than finished: Claude Desktop has no base-URL setting, so the only lever is the operating system environment — and that is the same `ANTHROPIC_*` namespace Claude Code already owns. Writing it here would move Claude Code's endpoint too. `%APPDATA%\Claude\claude_desktop_config.json` is never opened; it is your MCP servers and preferences, not provider config.
 
 ### Advanced options
 
-Each checkbox in **Add provider → Advanced options** writes exactly one key while it is ticked. Unticking it means the key is simply not written on the next switch.
+Each checkbox in **Add provider → Advanced options** writes exactly one key while it is ticked. These keys are U-Pool's, so unticking a box deletes its key on the next switch rather than leaving it behind.
 
 | Checkbox | App | Written |
 | --- | --- | --- |

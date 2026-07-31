@@ -352,6 +352,13 @@ export const CODEX_PRESETS: ProviderPreset[] = [
   },
 ];
 
+/**
+ * Claude Desktop carries a Claude Code record - the same Anthropic base URL, auth
+ * style and model fields - so it gets the Anthropic catalogue. Spelled as an
+ * explicit membership test rather than `=== "claude"`, because the fall-through
+ * silently handed Claude Desktop the Codex templates: `wire_api` and `env_key`
+ * presets filling in a form that never renders those fields.
+ */
 export function presetsFor(app: AppId): ProviderPreset[] {
-  return app === "claude" ? CLAUDE_PRESETS : CODEX_PRESETS;
+  return app === "claude" || app === "claude_desktop" ? CLAUDE_PRESETS : CODEX_PRESETS;
 }

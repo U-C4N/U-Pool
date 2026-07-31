@@ -83,9 +83,21 @@ function draftFromPreset(app: AppId, preset: ProviderPreset, apiKey = ""): Draft
   };
 }
 
+/**
+ * Claude Desktop drives the same Anthropic settings as Claude Code, so the form
+ * asks this rather than naming both ids at every branch - one of them would get
+ * missed the next time a field is added.
+ */
+function isAnthropic(app: AppId): boolean {
+  return app === "claude" || app === "claude_desktop";
+}
+
+const CLAUDE_URL_HINT =
+  "Any Claude-compatible endpoint. Enter the base address without a trailing slash - U-Pool appends the API paths.";
+
 const URL_HINT: Record<AppId, string> = {
-  claude:
-    "Any Claude-compatible endpoint. Enter the base address without a trailing slash - U-Pool appends the API paths.",
+  claude: CLAUDE_URL_HINT,
+  claude_desktop: CLAUDE_URL_HINT,
   codex:
     "OpenAI-compatible endpoint, usually ending in /v1. Pick the wire API below if the relay does not speak the Responses API.",
 };
@@ -142,6 +154,7 @@ function ExtraEditor({
 export function ProviderForm({
   app,
   appLabel,
+  mode,
   initial,
   saving,
   onCancel,
@@ -149,6 +162,8 @@ export function ProviderForm({
 }: {
   app: AppId;
   appLabel: string;
+  /** Stated by the caller, never guessed from the record - see `editing` below. */
+  mode: "add" | "edit";
   initial: ProviderDetail | null;
   saving: boolean;
   onCancel: () => void;
@@ -168,8 +183,11 @@ export function ProviderForm({
   const [advanced, setAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const editing = Boolean(initial?.id);
+  // Derived from the prop alone. Reading it off `initial?.id` is what put "Add
+  // provider" on the button while an existing provider was being edited.
+  const editing = mode === "edit";
   const locked = Boolean(initial?.official);
+  const anthropic = isAnthropic(app);
   const activePreset = catalog.find((p) => p.id === presetId);
   const initial_letter = draft.name.trim().charAt(0).toUpperCase() || "?";
 
@@ -196,96 +214,95 @@ export function ProviderForm({
     return map;
   }, [extra]);
 
-  const wideOpen = app === "claude" ? draft.bypass_permissions : draft.bypass_approvals;
+  const wideOpen = anthropic ? draft.bypass_permissions : draft.bypass_approvals;
 
-  const toggles =
-    app === "claude" ? (
-      <>
-        <Checkbox
-          danger
-          label="Bypass permission prompts"
-          hint={
-            <>
-              <Key>permissions.defaultMode: &quot;bypassPermissions&quot;</Key> — what{" "}
-              <Key>--dangerously-skip-permissions</Key> does, made permanent.
-            </>
-          }
-          checked={draft.bypass_permissions}
-          onChange={(value) =>
-            // The companion box only means anything in bypass mode, so it does not
-            // stay ticked-but-dead when bypass goes away.
-            setDraft((current) => ({
-              ...current,
-              bypass_permissions: value,
-              skip_bypass_prompt: value && current.skip_bypass_prompt,
-            }))
-          }
-        />
-        <Checkbox
-          danger
-          label="Skip the bypass warning screen"
-          hint={
-            <>
-              <Key>permissions.skipDangerousModePermissionPrompt</Key> — drops the one-off
-              accept-the-risk dialog that bypass mode opens with. Needs bypass above.
-            </>
-          }
-          checked={draft.skip_bypass_prompt}
-          disabled={!draft.bypass_permissions}
-          onChange={(value) => set("skip_bypass_prompt", value)}
-        />
-        <Checkbox
-          label="Auto-accept file edits"
-          hint={
-            <>
-              <Key>permissions.defaultMode: &quot;acceptEdits&quot;</Key> — edits go through, commands
-              still ask. Ignored while bypass is on.
-            </>
-          }
-          checked={draft.accept_edits}
-          disabled={draft.bypass_permissions}
-          onChange={(value) => set("accept_edits", value)}
-        />
-        <Checkbox
-          label="Trust MCP servers from the project"
-          hint={
-            <>
-              <Key>enableAllProjectMcpServers</Key> — approves every server a repository&apos;s
-              .mcp.json declares.
-            </>
-          }
-          checked={draft.all_project_mcp}
-          onChange={(value) => set("all_project_mcp", value)}
-        />
-      </>
-    ) : (
-      <>
-        <Checkbox
-          danger
-          label="Bypass approvals & sandbox"
-          hint={
-            <>
-              <Key>approval_policy = &quot;never&quot;</Key> plus{" "}
-              <Key>sandbox_mode = &quot;danger-full-access&quot;</Key> — the pair{" "}
-              <Key>--dangerously-bypass-approvals-and-sandbox</Key> sets.
-            </>
-          }
-          checked={draft.bypass_approvals}
-          onChange={(value) => set("bypass_approvals", value)}
-        />
-        <Checkbox
-          label="Live web search"
-          hint={
-            <>
-              <Key>web_search = &quot;live&quot;</Key> at the root of config.toml. The{" "}
-              <Key>[tools]</Key> boolean is a no-op in Codex, so it is not used.
-            </>
-          }
-          checked={draft.web_search}
-          onChange={(value) => set("web_search", value)}
-        />
-      </>
-    );
+  const toggles = anthropic ? (
+    <>
+      <Checkbox
+        danger
+        label="Bypass permission prompts"
+        hint={
+          <>
+            <Key>permissions.defaultMode: &quot;bypassPermissions&quot;</Key> — what{" "}
+            <Key>--dangerously-skip-permissions</Key> does, made permanent.
+          </>
+        }
+        checked={draft.bypass_permissions}
+        onChange={(value) =>
+          // The companion box only means anything in bypass mode, so it does not
+          // stay ticked-but-dead when bypass goes away.
+          setDraft((current) => ({
+            ...current,
+            bypass_permissions: value,
+            skip_bypass_prompt: value && current.skip_bypass_prompt,
+          }))
+        }
+      />
+      <Checkbox
+        danger
+        label="Skip the bypass warning screen"
+        hint={
+          <>
+            <Key>permissions.skipDangerousModePermissionPrompt</Key> — drops the one-off
+            accept-the-risk dialog that bypass mode opens with. Needs bypass above.
+          </>
+        }
+        checked={draft.skip_bypass_prompt}
+        disabled={!draft.bypass_permissions}
+        onChange={(value) => set("skip_bypass_prompt", value)}
+      />
+      <Checkbox
+        label="Auto-accept file edits"
+        hint={
+          <>
+            <Key>permissions.defaultMode: &quot;acceptEdits&quot;</Key> — edits go through, commands
+            still ask. Ignored while bypass is on.
+          </>
+        }
+        checked={draft.accept_edits}
+        disabled={draft.bypass_permissions}
+        onChange={(value) => set("accept_edits", value)}
+      />
+      <Checkbox
+        label="Trust MCP servers from the project"
+        hint={
+          <>
+            <Key>enableAllProjectMcpServers</Key> — approves every server a repository&apos;s
+            .mcp.json declares.
+          </>
+        }
+        checked={draft.all_project_mcp}
+        onChange={(value) => set("all_project_mcp", value)}
+      />
+    </>
+  ) : (
+    <>
+      <Checkbox
+        danger
+        label="Bypass approvals & sandbox"
+        hint={
+          <>
+            <Key>approval_policy = &quot;never&quot;</Key> plus{" "}
+            <Key>sandbox_mode = &quot;danger-full-access&quot;</Key> — the pair{" "}
+            <Key>--dangerously-bypass-approvals-and-sandbox</Key> sets.
+          </>
+        }
+        checked={draft.bypass_approvals}
+        onChange={(value) => set("bypass_approvals", value)}
+      />
+      <Checkbox
+        label="Live web search"
+        hint={
+          <>
+            <Key>web_search = &quot;live&quot;</Key> at the root of config.toml. The{" "}
+            <Key>[tools]</Key> boolean is a no-op in Codex, so it is not used.
+          </>
+        }
+        checked={draft.web_search}
+        onChange={(value) => set("web_search", value)}
+      />
+    </>
+  );
 
   const submit = () => {
     if (!draft.name.trim()) return setError("Give the provider a name.");
@@ -327,7 +344,7 @@ export function ProviderForm({
                 Provider preset
               </p>
               <p className="text-[11px] text-[var(--color-tertiary-label)]">
-                CC Switch style · {catalog.length} templates
+                {catalog.length} templates
               </p>
             </div>
             <div className="flex max-h-[168px] flex-wrap gap-1.5 overflow-y-auto pr-0.5">
@@ -388,8 +405,8 @@ export function ProviderForm({
           </Tip>
         ) : !editing && activePreset && activePreset.id !== "custom" ? (
           <Tip>
-            Template from CC Switch-style presets. URL and model are filled — paste your API key and
-            save. Switch to Custom for a blank form.
+            Template ready — URL and model are filled. Paste your API key and save. Switch to
+            Custom for a blank form.
           </Tip>
         ) : null}
 
@@ -473,12 +490,12 @@ export function ProviderForm({
                 <Field label="Model" hint="Leave blank to use the provider default.">
                   <TextInput
                     value={draft.model}
-                    placeholder={app === "claude" ? "claude-sonnet-4-5" : "gpt-5-codex"}
+                    placeholder={anthropic ? "claude-sonnet-4-5" : "gpt-5-codex"}
                     onChange={(event) => set("model", event.target.value)}
                   />
                 </Field>
 
-                {app === "claude" ? (
+                {anthropic ? (
                   <Field
                     label="Authentication header"
                     hint="Relays usually take a bearer token; native Anthropic keys use x-api-key."
@@ -506,7 +523,7 @@ export function ProviderForm({
                 )}
               </div>
 
-              {app === "claude" ? (
+              {anthropic ? (
                 <Field label="Small/fast model" hint="Optional ANTHROPIC_SMALL_FAST_MODEL override.">
                   <TextInput
                     value={draft.small_fast_model}
@@ -517,7 +534,7 @@ export function ProviderForm({
               ) : (
                 <Field
                   label="Key environment variable"
-                  hint="Only OPENAI_API_KEY can be written to auth.json; any other name has to be exported by you."
+                  hint="The variable Codex reads the key from. U-Pool sets it in your Windows environment, so a name other than OPENAI_API_KEY works too."
                 >
                   <TextInput
                     value={draft.env_key}
@@ -530,10 +547,10 @@ export function ProviderForm({
               {locked ? null : (
                 <div>
                   <p className="mb-1.5 text-sm font-medium text-zinc-700">
-                    {app === "claude" ? "Permissions & MCP" : "Approvals & sandbox"}
+                    {anthropic ? "Permissions & MCP" : "Approvals & sandbox"}
                   </p>
                   <p className="mb-2 text-xs text-zinc-400">
-                    {app === "claude"
+                    {anthropic
                       ? "Each box owns one key in settings.json while it is ticked, and takes it back out when you untick it. Your allow/deny rules are never touched."
                       : "Codex-wide keys written next to model_provider in config.toml, removed again when you untick the box."}
                   </p>
@@ -549,17 +566,17 @@ export function ProviderForm({
 
               <div>
                 <p className="mb-1.5 text-sm font-medium text-zinc-700">
-                  {app === "claude" ? "Extra environment variables" : "Extra provider fields"}
+                  {anthropic ? "Extra environment variables" : "Extra provider fields"}
                 </p>
                 <p className="mb-3 text-xs text-zinc-400">
-                  {app === "claude"
+                  {anthropic
                     ? "Written into the env block of settings.json and removed again when you switch away."
                     : "Written into the [model_providers] table for this provider."}
                 </p>
                 <ExtraEditor
                   entries={extra}
                   onChange={setExtra}
-                  keyLabel={app === "claude" ? "ENV_NAME" : "field"}
+                  keyLabel={anthropic ? "ENV_NAME" : "field"}
                 />
               </div>
             </div>
@@ -576,7 +593,7 @@ export function ProviderForm({
           <div className="relative z-[1] flex gap-2">
             <Button onClick={onCancel}>Cancel</Button>
             <Button variant="primary" onClick={submit} disabled={saving}>
-              {saving ? "Saving..." : editing ? "Save" : "Add provider"}
+              {saving ? "Saving..." : editing ? "Save changes" : "Add provider"}
             </Button>
           </div>
         </div>

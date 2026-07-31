@@ -1,4 +1,4 @@
-export type AppId = "claude" | "codex";
+export type AppId = "claude" | "claude_desktop" | "codex";
 
 export type AuthStyle = "auth_token" | "api_key";
 export type WireApi = "responses" | "chat";
@@ -71,6 +71,8 @@ export interface AppSettings {
   autostart_detail: string;
   /** Whether the periodic GitHub release check runs at all. */
   update_check_enabled: boolean;
+  /** Off means no `<filename>.backup` copy is left beside a file U-Pool rewrites. */
+  backup_enabled: boolean;
 }
 
 export type UpdatePhase =
@@ -136,8 +138,21 @@ export interface SwitchResult {
   files: string[];
   backups: string[];
   warnings: string[];
-  /** Keys that were in the live file and are not any more - a switch rewrites it whole. */
+  /** Keys the switch dropped - the write is surgical, so everything else survived. */
   removed: string[];
+  env_written: string[];
+  env_removed: string[];
+}
+
+/**
+ * The Windows environment is a second write target because the CLIs read
+ * `HKCU\Environment` as well as their own config files - Codex's
+ * `env_key = "codefast"` resolves nowhere else.
+ */
+export interface EnvInfo {
+  supported: boolean;
+  namespace: string;
+  vars: { name: string; value_masked: string; owned: boolean }[];
 }
 
 export type HealthStatus = "ok" | "auth" | "warn" | "error" | "unreachable" | "skipped";

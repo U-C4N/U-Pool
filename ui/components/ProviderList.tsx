@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { HealthResult, HealthStatus, ProviderSummary } from "@/lib/types";
+import type { AppId, HealthResult, HealthStatus, ProviderSummary } from "@/lib/types";
 import { AnthropicLogo, OpenAILogo } from "./BrandMarks";
 import {
   CheckIcon,
@@ -37,13 +37,23 @@ function HealthBadge({ result }: { result: HealthResult }) {
 
 const BYPASS_HINT: Record<ProviderSummary["app"], string> = {
   claude: "permission prompts are bypassed for this provider",
+  claude_desktop: "permission prompts are bypassed for this provider",
   codex: "approvals and the sandbox are bypassed for this provider",
 };
+
+/**
+ * Claude Desktop carries a Claude Code record, so every rule in this list reads
+ * the same for both. Spelled out rather than `!== "codex"` so a fourth app has
+ * to declare which side it is on.
+ */
+function isClaudeApp(app: AppId): boolean {
+  return app === "claude" || app === "claude_desktop";
+}
 
 /** A provider that has turned every confirmation off for its target CLI. */
 function isWideOpen(provider: ProviderSummary): boolean {
   if (provider.official) return false;
-  return provider.app === "claude" ? provider.bypass_permissions : provider.bypass_approvals;
+  return isClaudeApp(provider.app) ? provider.bypass_permissions : provider.bypass_approvals;
 }
 
 function looksOpenAI(provider: ProviderSummary): boolean {
@@ -58,7 +68,7 @@ function looksOpenAI(provider: ProviderSummary): boolean {
 function looksClaude(provider: ProviderSummary): boolean {
   const hay = `${provider.name} ${provider.website} ${provider.base_url}`.toLowerCase();
   return (
-    (provider.official && provider.app === "claude") ||
+    (provider.official && isClaudeApp(provider.app)) ||
     hay.includes("anthropic") ||
     hay.includes("claude")
   );

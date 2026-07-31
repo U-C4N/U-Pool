@@ -1,10 +1,10 @@
 """Single source of truth for provider records.
 
-``~/.u-pool/config.json`` holds every provider the user has defined. The live
-files under ``~/.claude`` and ``~/.codex`` are treated as *output*: each switch
-rewrites them from scratch to show exactly the active provider. Nothing is ever
-read back out of them except on first run, when an existing setup is imported
-so it is not lost.
+``~/.u-pool/config.json`` holds every provider the user has defined; the live
+files under ``~/.claude`` and ``~/.codex`` hold only the one that is active. The
+store never touches those files itself - it hands the record to an adapter and
+records what came back - and never reads them, except on first run, when an
+existing setup is imported so it is not lost.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from . import adapters, atomicio, paths
 from .adapters.base import ApplyResult
 from .models import (
     APP_CLAUDE,
+    APP_CLAUDE_DESKTOP,
     APP_CODEX,
     SUPPORTED_APPS,
     Provider,
@@ -31,6 +32,11 @@ OFFICIAL_SEEDS = {
         "name": "Claude Official",
         "website": "https://www.anthropic.com/claude-code",
         "note": "Sign in with your Anthropic account. Clears every managed env var.",
+    },
+    APP_CLAUDE_DESKTOP: {
+        "name": "Claude Official",
+        "website": "https://claude.ai/download",
+        "note": "Sign in inside the Claude Desktop app. U-Pool does not write its config yet.",
     },
     APP_CODEX: {
         "name": "OpenAI Official",

@@ -2,8 +2,32 @@
 
 import type { AppId, AppInfo } from "@/lib/types";
 import { OpenAILogo } from "./BrandMarks";
-import { ClaudeGlyph, FolderIcon, GearIcon, PlusIcon, PulseIcon } from "./icons";
+import {
+  ClaudeDesktopGlyph,
+  ClaudeGlyph,
+  FolderIcon,
+  GearIcon,
+  PlusIcon,
+  PulseIcon,
+} from "./icons";
 import { IconButton, cx } from "./ui";
+
+/**
+ * A mark needs nothing but a class, which is what lets one lookup hold both the
+ * inline SVGs and the mask-based brand marks.
+ */
+const TAB_MARK: Record<AppId, React.ComponentType<{ className?: string }>> = {
+  claude: ClaudeGlyph,
+  claude_desktop: ClaudeDesktopGlyph,
+  codex: OpenAILogo,
+};
+
+/** The OpenAI mark is black in its own right; the Anthropic ones take the clay. */
+const TAB_TINT: Record<AppId, string> = {
+  claude: "text-[#D97757]",
+  claude_desktop: "text-[#D97757]",
+  codex: "text-zinc-900",
+};
 
 export function Header({
   apps,
@@ -15,6 +39,7 @@ export function Header({
   onOpenFolder,
   onOpenSettings,
   testing,
+  canOpenFolder = true,
   updateAvailable = false,
 }: {
   apps: AppInfo[];
@@ -26,6 +51,8 @@ export function Header({
   onOpenFolder: () => void;
   onOpenSettings: () => void;
   testing: boolean;
+  /** False for an app with no live config, so the button is not silently dead. */
+  canOpenFolder?: boolean;
   /** Puts a dot on the gear, since the offer itself lives inside Settings. */
   updateAvailable?: boolean;
 }) {
@@ -47,6 +74,7 @@ export function Header({
         >
           {apps.map((app) => {
             const active = app.id === activeApp;
+            const Mark = TAB_MARK[app.id];
             return (
               <button
                 key={app.id}
@@ -63,21 +91,12 @@ export function Header({
               >
                 {active ? <span aria-hidden className="upool-segment-thumb" /> : null}
                 <span className="relative z-[1] flex items-center gap-1.5">
-                  {app.id === "codex" ? (
-                    <OpenAILogo
-                      className={cx(
-                        "h-3.5 w-3.5",
-                        active ? "text-zinc-900" : "text-[var(--color-tertiary-label)]",
-                      )}
-                    />
-                  ) : (
-                    <ClaudeGlyph
-                      className={cx(
-                        "h-3.5 w-3.5",
-                        active ? "text-[#D97757]" : "text-[var(--color-tertiary-label)]",
-                      )}
-                    />
-                  )}
+                  <Mark
+                    className={cx(
+                      "h-3.5 w-3.5",
+                      active ? TAB_TINT[app.id] : "text-[var(--color-tertiary-label)]",
+                    )}
+                  />
                   {app.label}
                 </span>
               </button>
@@ -89,7 +108,11 @@ export function Header({
           <IconButton label="Test every provider" onClick={onTestAll} disabled={testing}>
             <PulseIcon className={cx("h-[18px] w-[18px]", testing && "animate-pulse")} />
           </IconButton>
-          <IconButton label="Open config folder" onClick={onOpenFolder}>
+          <IconButton
+            label={canOpenFolder ? "Open config folder" : "This app has no config file yet"}
+            onClick={onOpenFolder}
+            disabled={!canOpenFolder}
+          >
             <FolderIcon className="h-[18px] w-[18px]" />
           </IconButton>
           <span className="relative inline-flex">
