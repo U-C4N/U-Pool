@@ -1,8 +1,126 @@
 "use client";
 
-import type { AppPaths, AppSettings, EnvInfo, UpdateStatus } from "@/lib/types";
-import { DownloadIcon, FolderIcon } from "./icons";
-import { Button, IconButton, Modal, Switch } from "./ui";
+import type {
+  AppPaths,
+  AppSettings,
+  CliVersions,
+  EnvInfo,
+  SessionSummary,
+  UpdateStatus,
+} from "@/lib/types";
+import { DownloadIcon, FolderIcon, RefreshIcon, TrashIcon } from "./icons";
+import { Button, IconButton, Modal, Switch, cx } from "./ui";
+
+/** Bytes as the shortest thing that is still honest at a glance. */
+function humanBytes(bytes: number): string {
+  if (bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const power = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  const value = bytes / 1024 ** power;
+  return `${value >= 10 || power === 0 ? Math.round(value) : value.toFixed(1)} ${units[power]}`;
+}
+
+/** `~/.claude/projects` reads better than the absolute path in a narrow row. */
+function shortenPath(path: string, home: string): string {
+  const normal = path.replace(/\\/g, "/");
+  const root = home.replace(/\\/g, "/").replace(/\/+$/, "");
+  return root && normal.startsWith(`${root}/`) ? `~${normal.slice(root.length)}` : normal;
+}
+
+function CliRow({ tool }: { tool: CliVersions["tools"][number] }) {
+  return (
+    <div className="flex items-center gap-3 rounded-[10px] bg-[var(--color-fill)] px-3 py-2.5">
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-medium text-[var(--color-label)]">{tool.label}</p>
+        <p
+          className="truncate font-mono text-[11px] text-[var(--color-secondary-label)]"
+          title={tool.path || tool.error}
+        >
+          {tool.path || tool.error || "—"}
+        </p>
+      </div>
+      <span
+        className={cx(
+          "shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold",
+          tool.version
+            ? "bg-white/50 text-[var(--color-label)]"
+            : "bg-white/40 text-[var(--color-tertiary-label)]",
+        )}
+      >
+        {tool.version || (tool.found ? "unknown" : "not found")}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * One app's transcripts, with the size measured rather than described.
+ *
+ * The count is the whole argument for pressing the button, so it is read fresh
+ * every time the panel opens and again after a purge - a row that still claims
+ * 230 MB after deleting it reads as a failure.
+ */
+function SessionRow({
+  label,
+  summary,
+  home,
+  busy,
+  errors,
+  onDelete,
+}: {
+  label: string;
+  summary: SessionSummary | null;
+  home: string;
+  busy: boolean;
+  errors: string[];
+  onDelete: () => void;
+}) {
+  const empty = summary !== null && summary.files === 0;
+  const places = (summary?.entries ?? [])
+    .map((entry) => shortenPath(entry.path, home))
+    .join(", ");
+  return (
+    <div className="rounded-[10px] bg-[var(--color-fill)] px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium text-[var(--color-label)]">
+            {label} conversations
+          </p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--color-secondary-label)]">
+            {summary === null
+              ? "Measuring…"
+              : empty
+                ? "Nothing to delete."
+                : `${summary.files.toLocaleString()} files · ${humanBytes(summary.bytes)}. Deleted for good — no backup is kept.`}
+          </p>
+          {places ? (
+            <p
+              className="mt-1 truncate font-mono text-[10.5px] text-[var(--color-tertiary-label)]"
+              title={places}
+            >
+              {places}
+            </p>
+          ) : null}
+        </div>
+        <Button
+          variant="danger"
+          className="h-8 shrink-0 px-3 text-xs"
+          disabled={busy || summary === null || empty}
+          onClick={onDelete}
+        >
+          <TrashIcon className="h-4 w-4" />
+          {busy ? "Deleting…" : "Delete all sessions"}
+        </Button>
+      </div>
+      {errors.length > 0 ? (
+        <p className="mt-2 rounded-[8px] bg-red-500/[0.07] px-2.5 py-2 text-[11px] leading-relaxed text-red-700">
+          {errors.length} item{errors.length === 1 ? "" : "s"} could not be deleted — the CLI is
+          probably still running. {errors[0]}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 const BUSY_LABEL: Record<string, string> = {
   checking: "Checking for updates…",
@@ -171,6 +289,11 @@ export function SettingsPanel({
   savingSettings,
   update,
   env,
+  clis,
+  sessions,
+  sessionLabels,
+  deletingSessions,
+  sessionErrors,
   onOpen,
   onToggleStartup,
   onOpenStartupSettings,
@@ -179,6 +302,8 @@ export function SettingsPanel({
   onInstallUpdate,
   onSkipUpdate,
   onToggleUpdateChecks,
+  onRefreshClis,
+  onDeleteSessions,
   onOpenExternal,
   onClose,
 }: {
@@ -191,6 +316,12 @@ export function SettingsPanel({
   update: UpdateStatus | null;
   /** The registry side of the active app's config; null until it has been read. */
   env: EnvInfo | null;
+  clis: CliVersions | null;
+  /** Per-app transcript counts, keyed by app id; absent until measured. */
+  sessions: Record<string, SessionSummary>;
+  sessionLabels: Record<string, string>;
+  deletingSessions: string;
+  sessionErrors: Record<string, string[]>;
   onOpen: (path: string) => void;
   onToggleStartup: (enabled: boolean) => void;
   onOpenStartupSettings: () => void;
@@ -199,10 +330,13 @@ export function SettingsPanel({
   onInstallUpdate: () => void;
   onSkipUpdate: (version: string) => void;
   onToggleUpdateChecks: (enabled: boolean) => void;
+  onRefreshClis: () => void;
+  onDeleteSessions: (app: string) => void;
   onOpenExternal: (url: string) => void;
   onClose: () => void;
 }) {
   const startupSupported = Boolean(settings?.autostart_supported);
+  const home = paths?.home ?? "";
   return (
     <Modal title="Settings" onClose={onClose} footer={<Button onClick={onClose}>Close</Button>}>
       <div className="space-y-4">
@@ -225,6 +359,47 @@ export function SettingsPanel({
           onOpenNotes={onOpenExternal}
           onToggleChecks={onToggleUpdateChecks}
         />
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+              Installed CLIs
+            </p>
+            <IconButton
+              label={clis?.busy ? "Checking…" : "Check again"}
+              className="h-7 w-7"
+              disabled={Boolean(clis?.busy)}
+              onClick={onRefreshClis}
+            >
+              <RefreshIcon className={cx("h-4 w-4", clis?.busy && "animate-spin")} />
+            </IconButton>
+          </div>
+          {(clis?.tools ?? []).map((tool) => (
+            <CliRow key={tool.id} tool={tool} />
+          ))}
+          {clis && !clis.ready ? (
+            <p className="text-xs text-zinc-400">Looking for them on this machine…</p>
+          ) : null}
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Sessions</p>
+          {Object.entries(sessionLabels).map(([app, label]) => (
+            <SessionRow
+              key={app}
+              label={label}
+              summary={sessions[app] ?? null}
+              home={home}
+              busy={deletingSessions === app}
+              errors={sessionErrors[app] ?? []}
+              onDelete={() => onDeleteSessions(app)}
+            />
+          ))}
+          <p className="text-[11px] leading-relaxed text-zinc-400">
+            Transcripts and prompt history only. Your settings, credentials, plugins and skills
+            live in the same folders and are left exactly as they are.
+          </p>
+        </div>
 
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Startup</p>

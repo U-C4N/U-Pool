@@ -4,7 +4,7 @@ Claude Desktop has no base-URL setting to write. Its only lever is the OS
 environment, and that lever is shared with Claude Code: the same ``ANTHROPIC_*``
 names, one namespace between the two apps. Writing them from this tab would move
 Claude Code's endpoint at the same time, and there is no second set of names to
-keep the two apart - so 0.6.0 ships the tab and defers the write rather than
+keep the two apart - so U-Pool ships the tab and defers the write rather than
 guessing at which app should win. Switching here still saves the provider and
 records the choice, so nothing the user typed is lost when support lands.
 
@@ -22,7 +22,7 @@ from .base import Adapter, ApplyResult
 from .claude import ClaudeAdapter
 
 PREVIEW_WARNING = (
-    "Claude Desktop is preview-only in 0.6.0 - your choice was recorded, "
+    "Claude Desktop is preview-only in 0.7.0 - your choice was recorded, "
     "but no configuration was written."
 )
 

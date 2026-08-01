@@ -10,6 +10,8 @@ from upool.models import (
     APP_CLAUDE,
     APP_CLAUDE_DESKTOP,
     APP_CODEX,
+    APP_HERMES,
+    APP_OPENCODE,
     SUPPORTED_APPS,
     Provider,
     UPoolError,
@@ -36,8 +38,15 @@ def test_bootstrap_seeds_official_entry_per_app(store):
     assert paths.config_file().exists()
 
 
-def test_a_config_written_by_0_5_0_gains_the_claude_desktop_slot():
-    # Two app slots and no third: the shape every 0.5.0 install has on disk.
+def test_a_config_written_by_an_older_build_gains_the_apps_added_since():
+    """An upgraded install must get the new tabs seeded, not left empty.
+
+    ``_bootstrap`` only runs when there is no config file at all, so 0.6.0 →
+    0.7.0 left Hermes and OpenCode with no rows - and empty is not neutral here.
+    The official entry is the only way to hand control back to the vendor and it
+    cannot be created from the form, so a tab without one is a dead end.
+    """
+    # Two app slots and no more: the shape every 0.5.0 install has on disk.
     atomicio.write_json(
         paths.config_file(),
         {
@@ -60,10 +69,42 @@ def test_a_config_written_by_0_5_0_gains_the_claude_desktop_slot():
     )
     store = Store()
 
+    # What was there is untouched, including the active choice.
     assert [p.name for p in store.list_providers(APP_CLAUDE)] == ["Relay"]
     assert store.current_id(APP_CLAUDE) == "abc"
-    assert store.list_providers(APP_CLAUDE_DESKTOP) == []
-    assert store.current_id(APP_CLAUDE_DESKTOP) == ""
+
+    for app in (APP_CLAUDE_DESKTOP, APP_HERMES, APP_OPENCODE):
+        providers = store.list_providers(app)
+        assert [p.official for p in providers] == [True], app
+        assert store.current_id(app) == providers[0].id, app
+
+
+def test_seeding_leaves_an_app_the_user_emptied_alone():
+    """Only a slot with nothing in it is seeded, and only with the official entry.
+
+    An app whose every provider was deleted on purpose must not quietly grow one
+    back on the next launch - so the trigger is "no providers", checked once at
+    load, and the seed is never re-applied to a slot that has rows.
+    """
+    atomicio.write_json(
+        paths.config_file(),
+        {
+            "version": 1,
+            "apps": {
+                app: {
+                    "current": "",
+                    "providers": [
+                        {"id": f"{app}-x", "app": app, "name": "Mine", "base_url": "https://x.example"}
+                    ],
+                }
+                for app in SUPPORTED_APPS
+            },
+        },
+    )
+    store = Store()
+
+    for app in SUPPORTED_APPS:
+        assert [p.name for p in store.list_providers(app)] == ["Mine"], app
 
 
 def test_switching_claude_desktop_records_the_choice_and_writes_nothing(store, sandbox):

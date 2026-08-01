@@ -68,6 +68,11 @@ def build_app() -> None:
         str(ROOT / "src"),
         "--add-data",
         f"{UI_OUT}{separator}ui/out",
+        # PyYAML is reached only through ``upool.yamlio``, which the Hermes adapter
+        # imports. Naming it means a missing bundle is a build failure rather than
+        # something the first Hermes switch discovers.
+        "--hidden-import",
+        "yaml",
         # Keep the bundle small: none of these are used at runtime.
         "--exclude-module",
         "tkinter",

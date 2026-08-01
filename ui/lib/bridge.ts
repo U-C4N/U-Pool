@@ -7,9 +7,12 @@ import type {
   AppSettings,
   AppState,
   Bootstrap,
+  CliVersions,
   EnvInfo,
   HealthResult,
   ProviderDetail,
+  SessionPurge,
+  SessionSummary,
   SwitchResult,
   UpdateStatus,
 } from "./types";
@@ -104,5 +107,9 @@ export const backend = {
   installUpdate: () => call<UpdateStatus>("install_update"),
   skipUpdate: (version: string) => call<UpdateStatus>("skip_update", version),
   setUpdateChecks: (enabled: boolean) => call<UpdateStatus>("set_update_checks", enabled),
+  cliVersions: () => call<CliVersions>("cli_versions"),
+  refreshCliVersions: () => call<CliVersions>("refresh_cli_versions"),
+  sessionSummary: (app: AppId) => call<SessionSummary>("session_summary", app),
+  deleteSessions: (app: AppId) => call<SessionPurge>("delete_sessions", app),
   quit: () => call<boolean>("quit"),
 };

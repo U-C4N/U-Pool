@@ -6,6 +6,8 @@ from upool.models import (
     APP_CLAUDE,
     APP_CLAUDE_DESKTOP,
     APP_CODEX,
+    APP_HERMES,
+    APP_OPENCODE,
     AUTH_API_KEY,
     SUPPORTED_APPS,
     Provider,
@@ -16,8 +18,32 @@ from upool.models import (
 )
 
 
-def test_the_three_apps_are_declared_in_tab_order():
-    assert SUPPORTED_APPS == (APP_CLAUDE, APP_CLAUDE_DESKTOP, APP_CODEX)
+def test_every_app_is_declared_in_tab_order():
+    assert SUPPORTED_APPS == (
+        APP_CLAUDE,
+        APP_CLAUDE_DESKTOP,
+        APP_CODEX,
+        APP_HERMES,
+        APP_OPENCODE,
+    )
+
+
+def test_hermes_rejects_a_transport_it_does_not_speak():
+    draft = {"name": "Relay", "base_url": "https://relay.example.com"}
+    validate(Provider(app=APP_HERMES, transport="chat_completions", **draft))
+    with pytest.raises(UPoolError, match="transport"):
+        validate(Provider(app=APP_HERMES, transport="grpc", **draft))
+
+
+def test_opencode_needs_an_sdk_package_and_a_model():
+    draft = {"name": "Relay", "base_url": "https://relay.example.com", "model": "sonnet"}
+    validate(Provider(app=APP_OPENCODE, **draft))
+    with pytest.raises(UPoolError, match="SDK package"):
+        validate(Provider(app=APP_OPENCODE, npm="@ai-sdk/nope", **draft))
+    # The model is half of OpenCode's ``"<provider>/<model>"`` selection, so a
+    # record without one could be saved but never switched to.
+    with pytest.raises(UPoolError, match="model id"):
+        validate(Provider(app=APP_OPENCODE, name="Relay", base_url="https://relay.example.com"))
 
 
 def test_claude_desktop_is_validated_exactly_like_claude_code():

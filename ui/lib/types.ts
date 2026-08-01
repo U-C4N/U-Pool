@@ -1,7 +1,22 @@
-export type AppId = "claude" | "claude_desktop" | "codex";
+export type AppId = "claude" | "claude_desktop" | "codex" | "hermes" | "opencode";
 
 export type AuthStyle = "auth_token" | "api_key";
 export type WireApi = "responses" | "chat";
+
+/** Hermes names the wire protocol per provider, in its own vocabulary. */
+export type Transport =
+  | "anthropic_messages"
+  | "chat_completions"
+  | "codex_responses"
+  | "bedrock_converse";
+
+/** OpenCode routes a provider through a Vercel AI SDK package. */
+export type NpmPackage =
+  | "@ai-sdk/anthropic"
+  | "@ai-sdk/openai"
+  | "@ai-sdk/openai-compatible"
+  | "@ai-sdk/amazon-bedrock"
+  | "@ai-sdk/google";
 
 export interface AppInfo {
   id: AppId;
@@ -40,6 +55,8 @@ export interface ProviderSummary extends ProviderToggles {
   small_fast_model: string;
   wire_api: WireApi;
   env_key: string;
+  transport: Transport;
+  npm: NpmPackage;
   extra: Record<string, string>;
   official: boolean;
   created_at: number;
@@ -124,6 +141,48 @@ export interface UpdateStatus {
   busy: boolean;
 }
 
+/** One target CLI as it is installed on this machine, or is not. */
+export interface CliVersion {
+  id: string;
+  label: string;
+  version: string;
+  path: string;
+  /** Found on disk. With an empty `version` this means broken, not missing. */
+  found: boolean;
+  error: string;
+}
+
+export interface CliVersions {
+  tools: CliVersion[];
+  busy: boolean;
+  /** False until the first probe has answered; the header shows placeholders. */
+  ready: boolean;
+}
+
+/** One thing `delete_sessions` would erase, with what it holds right now. */
+export interface SessionEntry {
+  path: string;
+  exists: boolean;
+  files: number;
+  bytes: number;
+}
+
+export interface SessionSummary {
+  app: AppId;
+  entries: SessionEntry[];
+  files: number;
+  bytes: number;
+}
+
+export interface SessionPurge {
+  app: AppId;
+  deleted: number;
+  freed: number;
+  /** A transcript the running CLI still holds open lands here, not in a throw. */
+  errors: string[];
+  summary: SessionSummary;
+}
+
 export interface Bootstrap {
   version: string;
   platform: string;
@@ -131,6 +190,7 @@ export interface Bootstrap {
   state: Record<AppId, AppState>;
   settings: AppSettings;
   update: UpdateStatus;
+  clis: CliVersions;
 }
 
 export interface SwitchResult {

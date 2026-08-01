@@ -43,6 +43,20 @@ def home() -> Path:
     return Path.home()
 
 
+def sandboxed() -> bool:
+    """Whether the home directory has been redirected for a test or a probe.
+
+    The CLIs below do not all live under the home directory - Hermes resolves
+    through ``%LOCALAPPDATA%`` and honours ``HERMES_HOME``, OpenCode honours
+    ``OPENCODE_CONFIG`` - so redirecting the home alone would leave two write
+    targets pointing at the developer's live install. Every such override is
+    therefore ignored while a fake home is in force, which makes the redirect
+    airtight by construction rather than by each caller remembering to clear
+    three more environment variables.
+    """
+    return bool(os.environ.get("UPOOL_FAKE_HOME"))
+
+
 def app_home() -> Path:
     """Where U-Pool keeps its own state (override with ``UPOOL_HOME``)."""
     override = os.environ.get("UPOOL_HOME")
@@ -116,6 +130,51 @@ def codex_config_file() -> Path:
 
 def codex_auth_file() -> Path:
     return codex_dir() / "auth.json"
+
+
+def hermes_dir() -> Path:
+    """Where the Hermes CLI keeps its config.
+
+    Hermes does not use a dotfile in the home directory on Windows - it installs
+    under ``%LOCALAPPDATA%\\hermes``, which is where the live ``config.yaml`` on
+    this machine actually is. ``HERMES_HOME`` wins over both, because that is the
+    override Hermes itself honours.
+    """
+    if sandboxed():
+        return home() / ".hermes"
+    override = os.environ.get("HERMES_HOME")
+    if override:
+        return Path(override)
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA")
+        if local:
+            return Path(local) / "hermes"
+    return home() / ".hermes"
+
+
+def hermes_config_file() -> Path:
+    return hermes_dir() / "config.yaml"
+
+
+def opencode_dir() -> Path:
+    """``~/.config/opencode`` on every platform, Windows included.
+
+    OpenCode follows the XDG layout rather than the platform convention, so this
+    is not ``%APPDATA%`` on Windows - the directory this resolves to is the one
+    already sitting in the user's profile.
+    """
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    if xdg and not sandboxed():
+        return Path(xdg) / "opencode"
+    return home() / ".config" / "opencode"
+
+
+def opencode_config_file() -> Path:
+    """``OPENCODE_CONFIG`` names the file itself, not the directory holding it."""
+    override = os.environ.get("OPENCODE_CONFIG")
+    if override and not sandboxed():
+        return Path(override)
+    return opencode_dir() / "opencode.json"
 
 
 def bundle_root() -> Path:

@@ -191,3 +191,17 @@ export const OpenAIGlyph = (p: IconProps) => (
 );
 
 export const CodexGlyph = OpenAIGlyph;
+
+// No inline glyphs for Hermes or OpenCode. Both ship a real mark - the Nous
+// Research illustration and the OpenCode square - and the stand-ins drawn before
+// those were wired up (a winged helmet, a terminal prompt) were inventions that
+// looked like brand marks without being them. A wrong logo is worse than a
+// missing one, so there is no fallback to fall back to.
+
+/** Refresh — a circular arrow. Takes `animate-spin` while a probe is in flight. */
+export const RefreshIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 12a8 8 0 1 1-2.5-5.8" />
+    <path d="M20.25 4v4.25H16" />
+  </Svg>
+);

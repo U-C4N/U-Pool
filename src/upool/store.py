@@ -18,6 +18,8 @@ from .models import (
     APP_CLAUDE,
     APP_CLAUDE_DESKTOP,
     APP_CODEX,
+    APP_HERMES,
+    APP_OPENCODE,
     SUPPORTED_APPS,
     Provider,
     UPoolError,
@@ -42,6 +44,16 @@ OFFICIAL_SEEDS = {
         "name": "OpenAI Official",
         "website": "https://developers.openai.com/codex",
         "note": "Sign in with your ChatGPT account. Clears the custom provider entry.",
+    },
+    APP_HERMES: {
+        "name": "Hermes Default",
+        "website": "https://github.com/NousResearch/hermes",
+        "note": "Clears the provider entry U-Pool wrote. Your own entries stay.",
+    },
+    APP_OPENCODE: {
+        "name": "OpenCode Default",
+        "website": "https://opencode.ai",
+        "note": "Clears the provider entry U-Pool wrote and the model it selected.",
     },
 }
 
@@ -96,24 +108,49 @@ class Store:
                 "current": current if current in known else "",
                 "providers": providers,
             }
+        self._seed_new_apps(data)
         return data
+
+    def _seed_new_apps(self, data: dict[str, Any]) -> None:
+        """Give an app that arrived after this config was written its first entry.
+
+        ``_bootstrap`` only runs when there is no config file at all, so upgrading
+        an install that already had one left the new tabs empty - and empty is not
+        a neutral state here. The official entry is the only way to hand control
+        back to the vendor, it cannot be created from the form, and a tab with no
+        rows reads as a broken feature rather than a new one.
+
+        Only ever *adds*, and only to a slot that has nothing in it: an app the
+        user has emptied on purpose keeps whatever they left.
+        """
+        for app in SUPPORTED_APPS:
+            slot = data["apps"][app]
+            if slot["providers"]:
+                continue
+            official, current = self._first_entries(app)
+            slot["providers"] = official
+            slot["current"] = current
+
+    def _first_entries(self, app: str) -> tuple[list[dict[str, Any]], str]:
+        """The official entry, plus whatever is already configured live."""
+        official = Provider(app=app, official=True, **OFFICIAL_SEEDS[app])
+        entries = [official.to_dict()]
+        current = official.id
+        try:
+            imported = adapters.get(app).import_live()
+        except UPoolError:
+            # A broken live config must not block the app from starting.
+            imported = None
+        if imported is not None:
+            entries.append(imported.to_dict())
+            current = imported.id
+        return entries, current
 
     def _bootstrap(self) -> dict[str, Any]:
         """First run: seed an official entry per app and import any live setup."""
         data = _empty()
         for app in SUPPORTED_APPS:
-            seed = OFFICIAL_SEEDS[app]
-            official = Provider(app=app, official=True, **seed)
-            entries = [official.to_dict()]
-            current = official.id
-            try:
-                imported = adapters.get(app).import_live()
-            except UPoolError:
-                # A broken live config must not block the app from starting.
-                imported = None
-            if imported is not None:
-                entries.append(imported.to_dict())
-                current = imported.id
+            entries, current = self._first_entries(app)
             data["apps"][app] = {"current": current, "providers": entries}
         return data
 

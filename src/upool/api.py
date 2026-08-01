@@ -20,7 +20,18 @@ import traceback
 from pathlib import Path
 from typing import Any, Callable
 
-from . import __version__, adapters, autostart, health, paths, settings, updater, winenv
+from . import (
+    __version__,
+    adapters,
+    autostart,
+    clis,
+    health,
+    paths,
+    sessions,
+    settings,
+    updater,
+    winenv,
+)
 from .models import Provider, UPoolError, as_bool, mask_secret
 from .store import Store
 
@@ -73,6 +84,11 @@ class Api:
     def bootstrap(self) -> dict[str, Any]:
         """Everything the UI needs for its first paint, in one round trip."""
         apps = adapters.all_apps()
+        # Started before the snapshot is taken, not after: a snapshot read first
+        # reports busy=false on a probe that is about to begin, and the UI only
+        # polls while busy is true - so the header would sit on placeholders until
+        # someone pressed refresh. Spawning a thread costs nothing here.
+        cli_state = clis.refresh_async(force=False)
         payload = {
             "version": APP_VERSION,
             "platform": sys.platform,
@@ -80,6 +96,7 @@ class Api:
             "state": {app["id"]: self._app_state(app["id"]) for app in apps},
             "settings": self._settings(),
             "update": self._updater.snapshot(),
+            "clis": cli_state,
         }
         # Last, and only a thread spawn: first paint must not wait on the network,
         # and a dead one must not delay it either.
@@ -203,6 +220,35 @@ class Api:
         providers = self.store.list_providers(app)
         names = {p.id: p.name for p in providers}
         return [r.to_dict() | {"name": names.get(r.provider_id, "")} for r in health.check_many(providers)]
+
+    # ------------------------------------------------------------ CLI versions
+
+    @endpoint
+    def cli_versions(self) -> dict[str, Any]:
+        """What is installed, from cache. Polled while ``busy`` is true."""
+        return clis.snapshot()
+
+    @endpoint
+    def refresh_cli_versions(self) -> dict[str, Any]:
+        return clis.refresh_async(force=True)
+
+    # --------------------------------------------------------------- sessions
+
+    @endpoint
+    def session_summary(self, app: str) -> dict[str, Any]:
+        """How much there is to delete, so the button can say it first."""
+        return sessions.summary(app)
+
+    @endpoint
+    def delete_sessions(self, app: str) -> dict[str, Any]:
+        """Erase this app's transcripts. Irreversible, and nothing is copied first.
+
+        Answers with the fresh summary as well as the outcome, so a partial delete -
+        a file the running CLI still holds open - shows as what is left rather than
+        as a success followed by a stale count.
+        """
+        outcome = sessions.purge(app)
+        return outcome | {"summary": sessions.summary(app)}
 
     # ------------------------------------------------------------------ shell
 

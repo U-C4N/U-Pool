@@ -19,8 +19,10 @@ APP_CLAUDE = "claude"
 # is the Anthropic environment variables, and those are keyed by namespace.
 APP_CLAUDE_DESKTOP = "claude_desktop"
 APP_CODEX = "codex"
+APP_HERMES = "hermes"
+APP_OPENCODE = "opencode"
 # Order is tab order in the UI.
-SUPPORTED_APPS = (APP_CLAUDE, APP_CLAUDE_DESKTOP, APP_CODEX)
+SUPPORTED_APPS = (APP_CLAUDE, APP_CLAUDE_DESKTOP, APP_CODEX, APP_HERMES, APP_OPENCODE)
 
 # Claude Code accepts either a bearer token or the classic x-api-key header;
 # which one a relay wants is the single most common setup mistake, so it is an
@@ -31,6 +33,31 @@ AUTH_API_KEY = "api_key"
 # Codex talks either the OpenAI Responses API or the older chat/completions one.
 WIRE_RESPONSES = "responses"
 WIRE_CHAT = "chat"
+
+# Hermes names the wire protocol per provider, in its own vocabulary. The live
+# config.yaml spells the key ``transport``; cc-switch calls the same idea
+# ``api_mode``, and the values are shared between them.
+TRANSPORT_ANTHROPIC = "anthropic_messages"
+TRANSPORT_CHAT = "chat_completions"
+TRANSPORT_RESPONSES = "codex_responses"
+TRANSPORT_BEDROCK = "bedrock_converse"
+TRANSPORTS = (TRANSPORT_ANTHROPIC, TRANSPORT_CHAT, TRANSPORT_RESPONSES, TRANSPORT_BEDROCK)
+
+# OpenCode routes a provider through a Vercel AI SDK adapter, named by npm
+# package. It is the one field that decides whether the endpoint is spoken to as
+# Anthropic, as OpenAI or as something else, so it is a field rather than a guess.
+NPM_ANTHROPIC = "@ai-sdk/anthropic"
+NPM_OPENAI = "@ai-sdk/openai"
+NPM_OPENAI_COMPATIBLE = "@ai-sdk/openai-compatible"
+NPM_BEDROCK = "@ai-sdk/amazon-bedrock"
+NPM_GOOGLE = "@ai-sdk/google"
+NPM_PACKAGES = (
+    NPM_ANTHROPIC,
+    NPM_OPENAI,
+    NPM_OPENAI_COMPATIBLE,
+    NPM_BEDROCK,
+    NPM_GOOGLE,
+)
 
 # Fields the UI sends as JSON booleans. A config.json hand-edited (or written by
 # an older build) can hold "true" / 1 instead, so they are coerced on load.
@@ -75,6 +102,12 @@ class Provider:
     # Codex
     wire_api: str = WIRE_RESPONSES
     env_key: str = "OPENAI_API_KEY"
+
+    # Hermes
+    transport: str = TRANSPORT_ANTHROPIC
+
+    # OpenCode
+    npm: str = NPM_ANTHROPIC
 
     # Free-form escape hatch: extra env vars (Claude) / extra provider keys (Codex).
     extra: dict[str, str] = field(default_factory=dict)
@@ -162,3 +195,13 @@ def validate(provider: Provider) -> None:
             raise UPoolError(f"Unknown wire API '{provider.wire_api}'.")
         if not provider.env_key.strip():
             raise UPoolError("Codex providers need an environment variable name for the key.")
+    if provider.app == APP_HERMES and provider.transport not in TRANSPORTS:
+        raise UPoolError(f"Unknown Hermes transport '{provider.transport}'.")
+    if provider.app == APP_OPENCODE:
+        if provider.npm not in NPM_PACKAGES:
+            raise UPoolError(f"Unknown OpenCode SDK package '{provider.npm}'.")
+        if not provider.model.strip():
+            # OpenCode selects a model with ``"<provider>/<model>"``; without the
+            # second half there is nothing to write into the top-level key, and the
+            # switch would define a provider without activating it.
+            raise UPoolError("OpenCode providers need a model id.")

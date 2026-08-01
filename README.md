@@ -1,6 +1,6 @@
 # U-Pool
 
-**Provider switcher for Claude Code and Codex.**
+**Provider switcher for Claude Code, Codex, Hermes and OpenCode.**
 
 Keep every endpoint, API key, and model in one place. Switch the active provider with a click. Probe reachability before you start working.
 
@@ -10,13 +10,17 @@ Python backend · Next.js UI · native OS webview — no Electron, no Node at ru
   <a href="https://github.com/U-C4N/U-Pool/stargazers"><img src="https://img.shields.io/github/stars/U-C4N/U-Pool?style=for-the-badge&logo=github&color=007aff" alt="Stars" /></a>
   <a href="https://github.com/U-C4N/U-Pool/network/members"><img src="https://img.shields.io/github/forks/U-C4N/U-Pool?style=for-the-badge&logo=github&color=0a84ff" alt="Forks" /></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+" />
-  <img src="https://img.shields.io/badge/version-0.6.0-informational?style=for-the-badge" alt="Version 0.6.0" />
+  <img src="https://img.shields.io/badge/version-0.7.0-informational?style=for-the-badge" alt="Version 0.7.0" />
 </p>
 
 ## Screenshot
 
 <p align="center">
-  <img src="assets/screenshot.png" alt="U-Pool providers view" width="900" />
+  <img src="assets/screenshot.png" alt="U-Pool showing the Hermes provider list, five app tabs, and the installed Claude Code and Codex versions in the header" width="900" />
+</p>
+
+<p align="center">
+  <sub>Five app tabs, the installed CLI versions read off the machine, and the provider picked up from an existing Hermes config on first run.</sub>
 </p>
 
 ---
@@ -25,10 +29,11 @@ Python backend · Next.js UI · native OS webview — no Electron, no Node at ru
 
 Switching between Anthropic, OpenRouter, DeepSeek, Azure, xAI, and custom relays usually means editing config files by hand. U-Pool turns that into a desktop app:
 
-- One list of providers for **Claude Code** and **Codex**
+- One list of providers for **Claude Code**, **Codex**, **Hermes** and **OpenCode**
 - One click to make a provider live — in the config file *and* in the Windows environment the CLIs read
 - Health checks that measure latency without spending tokens
 - Atomic writes, and a backup beside every file U-Pool changes
+- Which version of each CLI is installed, read off the machine rather than assumed
 
 ## Features
 
@@ -43,7 +48,10 @@ Switching between Anthropic, OpenRouter, DeepSeek, Azure, xAI, and custom relays
 | **Presets** | CodeFast, Yunwu, DeepSeek, Kimi, OpenRouter, MiniMax, Z.ai, Azure, xAI, Custom, and more |
 | **Official mode** | Hand control back to vendor login by clearing U-Pool-managed keys |
 | **Permission switches** | Per-provider checkboxes for bypass mode, auto-accept edits, project MCP trust, Codex approvals/sandbox and live web search |
-| **Claude Desktop** | A third tab, preview only — providers you add there are saved, nothing is written yet |
+| **Claude Desktop** | A tab, preview only — providers you add there are saved, nothing is written yet |
+| **Hermes & OpenCode** | Two more tabs with their own config writers — `config.yaml` is spliced section by section, `opencode.json` merged key by key |
+| **CLI versions** | The header reports the installed Claude Code and Codex versions; refresh re-probes the machine |
+| **Delete all sessions** | Two red buttons in Settings that erase each CLI's transcripts and prompt history — and nothing else in those folders |
 | **In-app updates** | Settings shows a pulsing Update button when a newer release is out, downloads it and swaps itself |
 | **Launch at sign-in** | Windows on/off switch — one `HKCU\...\Run` entry, removed again when you turn it off |
 
@@ -61,6 +69,10 @@ Switching between Anthropic, OpenRouter, DeepSeek, Azure, xAI, and custom relays
 | Codex | `~/.codex/config.toml` | Only while a checkbox is ticked: `approval_policy`, `sandbox_mode`, `web_search` |
 | Codex | `~/.codex/auth.json` | Written from scratch: `{"OPENAI_API_KEY": "…"}` when that is the provider's env key, otherwise `{}` |
 | Codex | `HKCU\Environment` | Whatever the provider's `env_key` is named, plus `OPENAI_BASE_URL` |
+| Hermes | `%LOCALAPPDATA%\hermes\config.yaml` | One entry under `providers:`, plus `model.provider` and `model.default` |
+| OpenCode | `~/.config/opencode/opencode.json` | One entry under `provider`, plus `$schema` and the top-level `model` |
+
+Hermes and OpenCode read their keys out of their own config files, so neither writes anything to `HKCU\Environment`.
 
 ### What a switch leaves alone
 
@@ -68,10 +80,14 @@ Switching between Anthropic, OpenRouter, DeepSeek, Azure, xAI, and custom relays
 
 Since 0.6.0 the write is surgical: U-Pool reads the file, replaces the handful of keys it owns, and puts the rest back untouched. `enabledPlugins`, `extraKnownMarketplaces`, `theme`, `effortLevel`, `model`, `hooks`, `statusLine` and `permissions.allow` / `deny` survive a Claude Code switch. `[mcp_servers.*]`, `[plugins.*]`, `[projects.*]` trust levels, `notify`, `[windows]`, `[features]`, `[shell_environment_policy]` and your comments survive a Codex switch — a key whose value has not changed is not even re-rendered, so its trailing comment stays put.
 
+Hermes gets the same treatment, and it matters more there: `config.yaml` is one 700-line document holding the toolsets, the kanban board and the chat integrations alongside the providers. U-Pool parses it to read, then splices new text into the `model:` and `providers:` line ranges only — every other line comes back byte for byte. `opencode.json` is merged the same way, so `theme`, `mcp`, `plugin`, `agent` and `keybinds` survive.
+
 Two things are still owned **whole**, because that is exactly where the pile-up happened:
 
 - the `env` block in `settings.json` — rebuilt from the provider every switch, removed entirely for an official one
 - `[model_providers]` in `config.toml` — only the active provider's table survives; the others are dropped and named in the toast
+
+Hermes and OpenCode are the opposite case and are deliberately **narrower**: a switch removes only the provider entry U-Pool wrote last time, recorded in `~/.u-pool/env-owned.json`. Entries you added by hand sit in the same map and are never touched.
 
 `~/.codex/auth.json` is written from scratch, because merging is what let a key an older build wrote sit there for months. If the file holds a ChatGPT login instead of an API key, the whole original is copied to `~/.u-pool/codex-login.json` first and restored verbatim when you switch back to the official provider.
 
@@ -93,9 +109,42 @@ The switch in **Settings → Backups** turns it off, and with it off nothing is 
 
 ### Claude Desktop
 
-Claude Desktop is a third tab in 0.6.0 and **writes nothing**. Providers you add there are saved and can be made current, and a notice above the list says the configuration was not written.
+Claude Desktop is a tab and **writes nothing**. Providers you add there are saved and can be made current, and a notice above the list says the configuration was not written.
 
 The reason it is preview rather than finished: Claude Desktop has no base-URL setting, so the only lever is the operating system environment — and that is the same `ANTHROPIC_*` namespace Claude Code already owns. Writing it here would move Claude Code's endpoint too. `%APPDATA%\Claude\claude_desktop_config.json` is never opened; it is your MCP servers and preferences, not provider config.
+
+### Hermes
+
+Hermes keeps everything in one `config.yaml` — under `%LOCALAPPDATA%\hermes` on Windows, `~/.hermes` elsewhere, and wherever `HERMES_HOME` points if it is set. A provider is an entry in the `providers:` map with `api`, `api_key`, `default_model`, `models` and `transport`; `model.provider` names the active one.
+
+`transport` is the field worth getting right, because Hermes does not infer it from the URL: `anthropic_messages`, `chat_completions`, `codex_responses` or `bedrock_converse`. The preset chips set it for you.
+
+A switch removes only the entry U-Pool wrote before. Providers you added yourself stay, and so does every other section of the file — the write is a line-range splice, not a re-serialisation.
+
+### OpenCode
+
+`~/.config/opencode/opencode.json` on every platform, including Windows, or wherever `OPENCODE_CONFIG` points. A provider is an entry under `provider` with `npm`, `name`, `options.baseURL`, `options.apiKey` and `models`; the top-level `model` selects it as `"<provider>/<model>"`, which is why the model id is required rather than optional here.
+
+`npm` picks the AI SDK adapter — `@ai-sdk/anthropic` for Claude-shaped endpoints, `@ai-sdk/openai-compatible` for most relays. Headers and SDK flags you add through **Extra SDK options** are kept when the key is rotated.
+
+### CLI versions
+
+The header shows the installed Claude Code and Codex versions, and the refresh button re-probes for them. `shutil.which` is tried first, then the places a global install actually lands — `%APPDATA%\npm`, `%LOCALAPPDATA%\npm`, `~/.bun/bin`, `~/.local/bin` — because a window launched from Explorer or the sign-in entry inherits the PATH as it stood at logon, not the one your terminal has.
+
+A tool found on disk that cannot report a version says so, rather than being reported as missing: a broken shim and an absent install need different fixes. **Settings → Installed CLIs** shows the resolved path for each.
+
+### Delete all sessions
+
+**Settings → Sessions** has one red button per CLI, with the file count and size measured before you press it. Confirming erases:
+
+| | |
+| --- | --- |
+| Claude Code | `~/.claude/projects`, `~/.claude/sessions`, `~/.claude/history.jsonl` |
+| Codex | `~/.codex/sessions`, `~/.codex/archived_sessions`, `~/.codex/history.jsonl`, `~/.codex/session_index.jsonl` |
+
+The list is a fixed table, not a pattern or a scan. Both CLIs keep their transcripts in the same folder as their credentials and settings, so `settings.json`, `.credentials.json`, `auth.json`, `config.toml`, plugins, skills, `file-history` and the scratch directories are all out of scope and stay.
+
+Nothing is backed up first — a second copy of 230 MB somewhere you did not ask for is not a safety net. Directories are emptied rather than removed, so the CLI still finds them. A file the running CLI holds open is reported as left behind instead of aborting the rest.
 
 ### Advanced options
 

@@ -1,4 +1,4 @@
-import type { AppId, AuthStyle, WireApi } from "./types";
+import type { AppId, AuthStyle, NpmPackage, Transport, WireApi } from "./types";
 
 export type ProviderPreset = {
   id: string;
@@ -10,6 +10,10 @@ export type ProviderPreset = {
   auth_style?: AuthStyle;
   wire_api?: WireApi;
   env_key?: string;
+  /** Hermes: the wire protocol the entry declares. */
+  transport?: Transport;
+  /** OpenCode: which AI SDK package speaks to the endpoint. */
+  npm?: NpmPackage;
   note?: string;
   /** Extra env vars (Claude) or Codex provider/top-level keys. */
   extra?: Record<string, string>;
@@ -353,12 +357,156 @@ export const CODEX_PRESETS: ProviderPreset[] = [
 ];
 
 /**
+ * Hermes declares the wire protocol per provider, so the same vendor appears here
+ * with a different `transport` than it carries anywhere else - and, for Kimi, a
+ * different base URL than the OpenCode entry below. They are not translations of
+ * one record; each catalogue is written against the config file its app reads.
+ */
+export const HERMES_PRESETS: ProviderPreset[] = [
+  {
+    id: "custom",
+    name: "Custom",
+    website: "",
+    base_url: "",
+    note: "Blank template",
+    tint: "#8E8E93",
+  },
+  {
+    id: "kimi-coding",
+    name: "Kimi For Coding",
+    website: "https://www.kimi.com/code",
+    base_url: "https://api.kimi.com/coding",
+    model: "kimi-for-coding",
+    transport: "anthropic_messages",
+    tint: "#6366F1",
+  },
+  {
+    id: "zai",
+    name: "Z.ai",
+    website: "https://z.ai",
+    base_url: "https://api.z.ai/api/anthropic",
+    model: "glm-5.1",
+    transport: "anthropic_messages",
+    tint: "#0F62FE",
+  },
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    website: "https://platform.deepseek.com",
+    base_url: "https://api.deepseek.com/anthropic",
+    model: "deepseek-chat",
+    transport: "anthropic_messages",
+    tint: "#4D6BFE",
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    website: "https://openrouter.ai",
+    base_url: "https://openrouter.ai/api/v1",
+    model: "anthropic/claude-sonnet-4",
+    transport: "chat_completions",
+    note: "OpenAI-shaped, so chat_completions rather than anthropic_messages",
+    tint: "#6566F1",
+  },
+  {
+    id: "minimax",
+    name: "MiniMax CH",
+    website: "https://platform.minimaxi.com",
+    base_url: "https://api.minimaxi.com/anthropic",
+    model: "MiniMax-M2.7",
+    transport: "anthropic_messages",
+    tint: "#F23F5D",
+  },
+];
+
+/**
+ * OpenCode picks an SDK package per provider, and `npm` is what decides how the
+ * endpoint is spoken to - an Anthropic-compatible relay needs `@ai-sdk/anthropic`
+ * however OpenAI-shaped its URL looks.
+ */
+export const OPENCODE_PRESETS: ProviderPreset[] = [
+  {
+    id: "custom",
+    name: "Custom",
+    website: "",
+    base_url: "",
+    npm: "@ai-sdk/openai-compatible",
+    note: "Blank template",
+    tint: "#8E8E93",
+  },
+  {
+    id: "opencode-go",
+    name: "OpenCode Go",
+    website: "https://opencode.ai/go",
+    base_url: "https://opencode.ai/zen/go/v1",
+    model: "deepseek-v4-flash",
+    npm: "@ai-sdk/openai-compatible",
+    tint: "#F97316",
+  },
+  {
+    id: "kimi-coding",
+    name: "Kimi For Coding",
+    website: "https://www.kimi.com/code",
+    base_url: "https://api.kimi.com/coding/v1",
+    model: "kimi-for-coding",
+    npm: "@ai-sdk/anthropic",
+    note: "Anthropic-shaped despite the /v1 - keep the anthropic SDK package",
+    tint: "#6366F1",
+  },
+  {
+    id: "zai",
+    name: "Z.ai",
+    website: "https://z.ai",
+    base_url: "https://api.z.ai/api/anthropic",
+    model: "glm-5.1",
+    npm: "@ai-sdk/anthropic",
+    tint: "#0F62FE",
+  },
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    website: "https://platform.deepseek.com",
+    base_url: "https://api.deepseek.com/v1",
+    model: "deepseek-chat",
+    npm: "@ai-sdk/openai-compatible",
+    tint: "#4D6BFE",
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    website: "https://openrouter.ai",
+    base_url: "https://openrouter.ai/api/v1",
+    model: "anthropic/claude-sonnet-4",
+    npm: "@ai-sdk/openai-compatible",
+    tint: "#6566F1",
+  },
+  {
+    id: "xai",
+    name: "xAI Grok",
+    website: "https://x.ai/api",
+    base_url: "https://api.x.ai/v1",
+    model: "grok-4",
+    npm: "@ai-sdk/openai-compatible",
+    tint: "#111111",
+  },
+];
+
+/**
  * Claude Desktop carries a Claude Code record - the same Anthropic base URL, auth
  * style and model fields - so it gets the Anthropic catalogue. Spelled as an
- * explicit membership test rather than `=== "claude"`, because the fall-through
+ * exhaustive lookup rather than a chain of tests, because the fall-through
  * silently handed Claude Desktop the Codex templates: `wire_api` and `env_key`
- * presets filling in a form that never renders those fields.
+ * presets filling in a form that never renders those fields. A new app id now
+ * fails to compile here instead.
  */
+const CATALOGUES: Record<AppId, ProviderPreset[]> = {
+  claude: CLAUDE_PRESETS,
+  claude_desktop: CLAUDE_PRESETS,
+  codex: CODEX_PRESETS,
+  hermes: HERMES_PRESETS,
+  opencode: OPENCODE_PRESETS,
+};
+
 export function presetsFor(app: AppId): ProviderPreset[] {
-  return app === "claude" || app === "claude_desktop" ? CLAUDE_PRESETS : CODEX_PRESETS;
+  return CATALOGUES[app];
 }

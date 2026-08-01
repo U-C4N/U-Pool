@@ -42,6 +42,8 @@ function blank(app: AppId): Draft {
     small_fast_model: "",
     wire_api: "responses",
     env_key: "OPENAI_API_KEY",
+    transport: "anthropic_messages",
+    npm: "@ai-sdk/anthropic",
     extra: {},
     bypass_permissions: false,
     skip_bypass_prompt: false,
@@ -79,6 +81,8 @@ function draftFromPreset(app: AppId, preset: ProviderPreset, apiKey = ""): Draft
     auth_style: preset.auth_style ?? "auth_token",
     wire_api: preset.wire_api ?? "responses",
     env_key: preset.env_key ?? "OPENAI_API_KEY",
+    transport: preset.transport ?? "anthropic_messages",
+    npm: preset.npm ?? "@ai-sdk/anthropic",
     extra: { ...(preset.extra ?? {}) },
   };
 }
@@ -92,6 +96,22 @@ function isAnthropic(app: AppId): boolean {
   return app === "claude" || app === "claude_desktop";
 }
 
+/**
+ * Which set of advanced fields the form renders. Hermes and OpenCode take the
+ * same record as everything else but almost none of the same keys - no auth
+ * style, no wire API, no permission switches - so the branch is a family rather
+ * than the `anthropic ? … : …` pair it used to be.
+ */
+type Family = "anthropic" | "codex" | "hermes" | "opencode";
+
+const FAMILY: Record<AppId, Family> = {
+  claude: "anthropic",
+  claude_desktop: "anthropic",
+  codex: "codex",
+  hermes: "hermes",
+  opencode: "opencode",
+};
+
 const CLAUDE_URL_HINT =
   "Any Claude-compatible endpoint. Enter the base address without a trailing slash - U-Pool appends the API paths.";
 
@@ -100,6 +120,47 @@ const URL_HINT: Record<AppId, string> = {
   claude_desktop: CLAUDE_URL_HINT,
   codex:
     "OpenAI-compatible endpoint, usually ending in /v1. Pick the wire API below if the relay does not speak the Responses API.",
+  hermes:
+    "Written as the provider's api field in config.yaml. Set the transport below to whichever protocol the endpoint actually speaks - Hermes does not guess it from the URL.",
+  opencode:
+    "Written as options.baseURL in opencode.json. The SDK package below decides how it is spoken to, so an Anthropic-shaped relay needs the anthropic package even when the URL ends in /v1.",
+};
+
+const TRANSPORT_LABEL: Record<string, string> = {
+  anthropic_messages: "anthropic_messages (Claude-shaped)",
+  chat_completions: "chat_completions (OpenAI-shaped)",
+  codex_responses: "codex_responses (OpenAI Responses)",
+  bedrock_converse: "bedrock_converse (AWS Bedrock)",
+};
+
+const EXTRA_TITLE: Record<Family, string> = {
+  anthropic: "Extra environment variables",
+  codex: "Extra provider fields",
+  hermes: "Extra provider fields",
+  opencode: "Extra SDK options",
+};
+
+const EXTRA_HINT: Record<Family, string> = {
+  anthropic:
+    "Written into the env block of settings.json and removed again when you switch away.",
+  codex: "Written into the [model_providers] table for this provider.",
+  hermes: "Written into this provider's entry under providers: in config.yaml.",
+  opencode: "Written into this provider's options object in opencode.json.",
+};
+
+const MODEL_PLACEHOLDER: Record<Family, string> = {
+  anthropic: "claude-sonnet-4-5",
+  codex: "gpt-5-codex",
+  hermes: "kimi-for-coding",
+  opencode: "claude-sonnet-4-5",
+};
+
+const NPM_LABEL: Record<string, string> = {
+  "@ai-sdk/anthropic": "@ai-sdk/anthropic — Anthropic",
+  "@ai-sdk/openai": "@ai-sdk/openai — OpenAI Responses",
+  "@ai-sdk/openai-compatible": "@ai-sdk/openai-compatible — OpenAI-compatible",
+  "@ai-sdk/amazon-bedrock": "@ai-sdk/amazon-bedrock — Amazon Bedrock",
+  "@ai-sdk/google": "@ai-sdk/google — Google Gemini",
 };
 
 /** Key/value rows for the escape-hatch fields each adapter passes straight through. */
@@ -188,6 +249,10 @@ export function ProviderForm({
   const editing = mode === "edit";
   const locked = Boolean(initial?.official);
   const anthropic = isAnthropic(app);
+  const family = FAMILY[app];
+  // Hermes and OpenCode have no permission model U-Pool can drive from here, so
+  // the whole toggles block is absent for them rather than rendered empty.
+  const hasToggles = family === "anthropic" || family === "codex";
   const activePreset = catalog.find((p) => p.id === presetId);
   const initial_letter = draft.name.trim().charAt(0).toUpperCase() || "?";
 
@@ -214,7 +279,7 @@ export function ProviderForm({
     return map;
   }, [extra]);
 
-  const wideOpen = anthropic ? draft.bypass_permissions : draft.bypass_approvals;
+  const wideOpen = hasToggles && (anthropic ? draft.bypass_permissions : draft.bypass_approvals);
 
   const toggles = anthropic ? (
     <>
@@ -310,6 +375,11 @@ export function ProviderForm({
       if (!draft.base_url.trim()) return setError("The request URL is required.");
       if (!/^https?:\/\//i.test(draft.base_url.trim())) {
         return setError("The request URL must start with http:// or https://.");
+      }
+      if (family === "opencode" && !draft.model.trim()) {
+        // Caught here as well as in the backend so the message names the field the
+        // user has to open Advanced options to reach.
+        return setError("OpenCode needs a model id — it is half of the provider selection.");
       }
     }
     setError(null);
@@ -487,15 +557,22 @@ export function ProviderForm({
           {advanced ? (
             <div className="animate-fade-in mt-4 space-y-5">
               <div className="grid gap-5 sm:grid-cols-2">
-                <Field label="Model" hint="Leave blank to use the provider default.">
+                <Field
+                  label="Model"
+                  hint={
+                    family === "opencode"
+                      ? "Required. OpenCode selects a provider as \"<provider>/<model>\", so this is half of the switch."
+                      : "Leave blank to use the provider default."
+                  }
+                >
                   <TextInput
                     value={draft.model}
-                    placeholder={anthropic ? "claude-sonnet-4-5" : "gpt-5-codex"}
+                    placeholder={MODEL_PLACEHOLDER[family]}
                     onChange={(event) => set("model", event.target.value)}
                   />
                 </Field>
 
-                {anthropic ? (
+                {family === "anthropic" ? (
                   <Field
                     label="Authentication header"
                     hint="Relays usually take a bearer token; native Anthropic keys use x-api-key."
@@ -510,7 +587,7 @@ export function ProviderForm({
                       <option value="api_key">x-api-key (ANTHROPIC_API_KEY)</option>
                     </Select>
                   </Field>
-                ) : (
+                ) : family === "codex" ? (
                   <Field label="Wire API" hint="Responses is the modern OpenAI protocol.">
                     <Select
                       value={draft.wire_api}
@@ -520,10 +597,44 @@ export function ProviderForm({
                       <option value="chat">chat completions</option>
                     </Select>
                   </Field>
+                ) : family === "hermes" ? (
+                  <Field
+                    label="Transport"
+                    hint="The protocol Hermes speaks to this endpoint with, written as the entry's transport key."
+                  >
+                    <Select
+                      value={draft.transport}
+                      onChange={(event) =>
+                        set("transport", event.target.value as Draft["transport"])
+                      }
+                    >
+                      {Object.entries(TRANSPORT_LABEL).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                ) : (
+                  <Field
+                    label="SDK package"
+                    hint="The AI SDK adapter OpenCode loads for this provider, written as npm."
+                  >
+                    <Select
+                      value={draft.npm}
+                      onChange={(event) => set("npm", event.target.value as Draft["npm"])}
+                    >
+                      {Object.entries(NPM_LABEL).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
                 )}
               </div>
 
-              {anthropic ? (
+              {family === "anthropic" ? (
                 <Field label="Small/fast model" hint="Optional ANTHROPIC_SMALL_FAST_MODEL override.">
                   <TextInput
                     value={draft.small_fast_model}
@@ -531,7 +642,7 @@ export function ProviderForm({
                     onChange={(event) => set("small_fast_model", event.target.value)}
                   />
                 </Field>
-              ) : (
+              ) : family === "codex" ? (
                 <Field
                   label="Key environment variable"
                   hint="The variable Codex reads the key from. U-Pool sets it in your Windows environment, so a name other than OPENAI_API_KEY works too."
@@ -542,9 +653,9 @@ export function ProviderForm({
                     onChange={(event) => set("env_key", event.target.value)}
                   />
                 </Field>
-              )}
+              ) : null}
 
-              {locked ? null : (
+              {locked || !hasToggles ? null : (
                 <div>
                   <p className="mb-1.5 text-sm font-medium text-zinc-700">
                     {anthropic ? "Permissions & MCP" : "Approvals & sandbox"}
@@ -566,17 +677,13 @@ export function ProviderForm({
 
               <div>
                 <p className="mb-1.5 text-sm font-medium text-zinc-700">
-                  {anthropic ? "Extra environment variables" : "Extra provider fields"}
+                  {family === "anthropic" ? "Extra environment variables" : EXTRA_TITLE[family]}
                 </p>
-                <p className="mb-3 text-xs text-zinc-400">
-                  {anthropic
-                    ? "Written into the env block of settings.json and removed again when you switch away."
-                    : "Written into the [model_providers] table for this provider."}
-                </p>
+                <p className="mb-3 text-xs text-zinc-400">{EXTRA_HINT[family]}</p>
                 <ExtraEditor
                   entries={extra}
                   onChange={setExtra}
-                  keyLabel={anthropic ? "ENV_NAME" : "field"}
+                  keyLabel={family === "anthropic" ? "ENV_NAME" : "field"}
                 />
               </div>
             </div>

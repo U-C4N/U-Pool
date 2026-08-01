@@ -12,10 +12,13 @@ import type {
   AppSettings,
   AppState,
   Bootstrap,
+  CliVersions,
   EnvInfo,
   HealthResult,
   ProviderDetail,
   ReleaseInfo,
+  SessionPurge,
+  SessionSummary,
   SwitchResult,
   UpdateStatus,
 } from "./types";
@@ -29,13 +32,17 @@ const OFFICIAL_SITE: Record<AppId, string> = {
   claude: "https://www.anthropic.com/claude-code",
   claude_desktop: "https://claude.ai/download",
   codex: "https://developers.openai.com/codex",
+  hermes: "https://github.com/NousResearch/hermes",
+  opencode: "https://opencode.ai",
 };
 
-/** Claude Desktop is preview-only in 0.6.0, so its adapter reports no live files. */
+/** Claude Desktop is preview-only in 0.7.0, so its adapter reports no live files. */
 const FILES: Record<AppId, string[]> = {
   claude: ["~/.claude/settings.json"],
   claude_desktop: [],
   codex: ["~/.codex/config.toml", "~/.codex/auth.json"],
+  hermes: ["%LOCALAPPDATA%/hermes/config.yaml"],
+  opencode: ["~/.config/opencode/opencode.json"],
 };
 
 type SwitchOutcome = Omit<SwitchResult, "state" | "files">;
@@ -52,7 +59,7 @@ const SWITCH_OUTCOME: Record<AppId, SwitchOutcome> = {
   claude_desktop: {
     backups: [],
     warnings: [
-      "Claude Desktop is preview-only in 0.6.0 — your choice was recorded, but no configuration was written.",
+      "Claude Desktop is preview-only in 0.7.0 — your choice was recorded, but no configuration was written.",
     ],
     removed: [],
     env_written: [],
@@ -63,6 +70,22 @@ const SWITCH_OUTCOME: Record<AppId, SwitchOutcome> = {
     warnings: [],
     removed: ["model_providers.yunwu"],
     env_written: ["codefast", "OPENAI_BASE_URL"],
+    env_removed: [],
+  },
+  // Both write files only - neither reads its key out of the environment, so the
+  // env lines stay empty here the way the real adapters leave them.
+  hermes: {
+    backups: ["%LOCALAPPDATA%/hermes/config.yaml.backup"],
+    warnings: [],
+    removed: ["providers.yunwu"],
+    env_written: [],
+    env_removed: [],
+  },
+  opencode: {
+    backups: ["~/.config/opencode/opencode.json.backup"],
+    warnings: [],
+    removed: ["provider.yunwu"],
+    env_written: [],
     env_removed: [],
   },
 };
@@ -80,9 +103,15 @@ const ANTHROPIC_ENV: EnvInfo = {
 // Code's adapter claims a namespace - the desktop one is preview-only and writes
 // nothing. So the real endpoint answers an empty namespace here, and the mock says
 // the same rather than showing a section the desktop app never renders.
+const NO_ENV: EnvInfo = { supported: false, namespace: "", vars: [] };
+
 const MOCK_ENV: Record<AppId, EnvInfo> = {
   claude: ANTHROPIC_ENV,
-  claude_desktop: { supported: false, namespace: "", vars: [] },
+  claude_desktop: NO_ENV,
+  // Hermes reads its key from config.yaml and OpenCode from opencode.json, so
+  // neither claims a namespace and the panel says so instead of listing nothing.
+  hermes: NO_ENV,
+  opencode: NO_ENV,
   codex: {
     supported: true,
     namespace: "openai",
@@ -109,6 +138,8 @@ function seed(app: AppId, name: string, base: string, official = false): Provide
     small_fast_model: "",
     wire_api: "responses",
     env_key: "OPENAI_API_KEY",
+    transport: "anthropic_messages",
+    npm: "@ai-sdk/anthropic",
     extra: {},
     bypass_permissions: false,
     skip_bypass_prompt: false,
@@ -162,7 +193,7 @@ const mockUpdate: UpdateStatus = {
   verified: "",
   skipped_version: "",
   last_check: Math.floor(Date.now() / 1000),
-  current_version: "0.6.0-mock",
+  current_version: "0.7.0-mock",
   installed_from: "",
   install_failed: "",
   busy: false,
@@ -189,7 +220,88 @@ const db: Record<AppId, { current: string; providers: ProviderDetail[] }> = {
     current: "codex-openai-official",
     providers: [seed("codex", "OpenAI Official", "", true)],
   },
+  hermes: {
+    current: "hermes-hermes-default",
+    providers: [
+      seed("hermes", "Hermes Default", "", true),
+      {
+        ...seed("hermes", "Kimi For Coding", "https://api.kimi.com/coding"),
+        model: "kimi-for-coding",
+      },
+    ],
+  },
+  opencode: {
+    current: "opencode-opencode-default",
+    providers: [
+      seed("opencode", "OpenCode Default", "", true),
+      {
+        ...seed("opencode", "OpenCode Go", "https://opencode.ai/zen/go/v1"),
+        model: "deepseek-v4-flash",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    ],
+  },
 };
+
+const mockClis: CliVersions = {
+  tools: [
+    {
+      id: "claude",
+      label: "Claude Code",
+      version: "2.1.4",
+      path: "%APPDATA%/npm/claude.cmd",
+      found: true,
+      error: "",
+    },
+    // Left unfound on purpose: the placeholder is the state the header is hardest
+    // to get right, so the preview should always be showing one of them.
+    {
+      id: "codex",
+      label: "Codex",
+      version: "",
+      path: "",
+      found: false,
+      error: "Not installed, or not on this app's PATH.",
+    },
+  ],
+  busy: false,
+  ready: true,
+};
+
+/** Only the two apps whose transcript locations the backend actually knows. */
+const mockSessions: Record<string, SessionSummary> = {
+  claude: {
+    app: "claude",
+    entries: [
+      { path: "~/.claude/projects", exists: true, files: 936, bytes: 240_766_373 },
+      { path: "~/.claude/sessions", exists: true, files: 2, bytes: 706 },
+      { path: "~/.claude/history.jsonl", exists: true, files: 1, bytes: 22_643 },
+    ],
+    files: 939,
+    bytes: 240_789_722,
+  },
+  codex: {
+    app: "codex",
+    entries: [
+      { path: "~/.codex/sessions", exists: true, files: 29, bytes: 19_058_523 },
+      { path: "~/.codex/archived_sessions", exists: true, files: 24, bytes: 9_590_213 },
+      { path: "~/.codex/history.jsonl", exists: true, files: 1, bytes: 22_643 },
+      { path: "~/.codex/session_index.jsonl", exists: false, files: 0, bytes: 0 },
+    ],
+    files: 54,
+    bytes: 28_671_379,
+  },
+};
+
+function emptySummary(app: string): SessionSummary {
+  const previous = mockSessions[app];
+  return {
+    app: app as AppId,
+    entries: (previous?.entries ?? []).map((entry) => ({ ...entry, files: 0, bytes: 0 })),
+    files: 0,
+    bytes: 0,
+  };
+}
 
 function state(app: AppId): AppState {
   const slot = db[app];
@@ -213,20 +325,25 @@ const find = (app: AppId, id: string) => db[app].providers.find((p) => p.id === 
 export const mockApi = {
   bootstrap: () =>
     ok<Bootstrap>({
-      version: "0.6.0-mock",
+      version: "0.7.0-mock",
       platform: "browser",
       apps: [
         { id: "claude", label: "Claude Code" },
         { id: "claude_desktop", label: "Claude Desktop" },
         { id: "codex", label: "Codex" },
+        { id: "hermes", label: "Hermes" },
+        { id: "opencode", label: "OpenCode" },
       ],
       state: {
         claude: state("claude"),
         claude_desktop: state("claude_desktop"),
         codex: state("codex"),
+        hermes: state("hermes"),
+        opencode: state("opencode"),
       },
       settings: mockSettings,
       update: { ...mockUpdate },
+      clis: { ...mockClis, tools: mockClis.tools.map((tool) => ({ ...tool })) },
     }),
   list_providers: (app: AppId) => ok(state(app)),
   get_provider: (app: AppId, id: string) => {
@@ -361,5 +478,26 @@ export const mockApi = {
     return ok<UpdateStatus>({ ...mockUpdate });
   },
   set_update_checks: () => ok<UpdateStatus>({ ...mockUpdate }),
+  cli_versions: () => ok<CliVersions>({ ...mockClis, tools: mockClis.tools.map((t) => ({ ...t })) }),
+  refresh_cli_versions: () =>
+    ok<CliVersions>({ ...mockClis, tools: mockClis.tools.map((t) => ({ ...t })) }),
+  session_summary: (app: string) => {
+    const summary = mockSessions[app];
+    return summary ? ok<SessionSummary>(summary) : fail(`U-Pool does not track sessions for '${app}'.`);
+  },
+  delete_sessions: (app: string) => {
+    const summary = mockSessions[app];
+    if (!summary) return fail(`U-Pool does not track sessions for '${app}'.`);
+    const deleted = summary.files;
+    const freed = summary.bytes;
+    mockSessions[app] = emptySummary(app);
+    return ok<SessionPurge>({
+      app: app as AppId,
+      deleted,
+      freed,
+      errors: [],
+      summary: mockSessions[app],
+    });
+  },
   quit: () => ok(true),
 };

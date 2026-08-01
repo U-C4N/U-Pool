@@ -47,10 +47,26 @@ def _prepare(home: Path) -> None:
     os.environ["UPOOL_HOME"] = str(home / ".u-pool")
     (home / ".claude").mkdir(parents=True, exist_ok=True)
     (home / ".codex").mkdir(parents=True, exist_ok=True)
+    (home / ".hermes").mkdir(parents=True, exist_ok=True)
+    (home / ".config" / "opencode").mkdir(parents=True, exist_ok=True)
 
-    from upool import winenv
+    from upool import paths, winenv
 
     winenv.ENV_KEY = SCRATCH_ENV_KEY
+
+    # Hermes and OpenCode do not live under the home directory, so the redirect
+    # above is not enough on its own. ``paths.sandboxed`` is what makes their
+    # helpers ignore %LOCALAPPDATA%, HERMES_HOME and OPENCODE_CONFIG; this checks
+    # it actually did, because getting it wrong writes to the developer's live
+    # Hermes config rather than to a temp directory.
+    for resolved in (
+        paths.claude_settings_file(),
+        paths.codex_config_file(),
+        paths.hermes_config_file(),
+        paths.opencode_config_file(),
+    ):
+        if not str(resolved).startswith(str(home)):
+            raise SystemExit(f"[sandbox] {resolved} escaped the sandbox - refusing to run")
 
 
 def main(argv: list[str]) -> int:

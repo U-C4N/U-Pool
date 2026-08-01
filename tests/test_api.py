@@ -9,7 +9,13 @@ import pytest
 from upool import autostart, paths, settings, winenv
 from upool.adapters.claude_desktop import PREVIEW_WARNING
 from upool.api import Api
-from upool.models import APP_CLAUDE, APP_CLAUDE_DESKTOP, APP_CODEX
+from upool.models import (
+    APP_CLAUDE,
+    APP_CLAUDE_DESKTOP,
+    APP_CODEX,
+    APP_HERMES,
+    APP_OPENCODE,
+)
 
 windows_only = pytest.mark.skipif(
     sys.platform != "win32", reason="the environment key only exists on Windows"
@@ -29,9 +35,16 @@ def draft(**kwargs) -> dict:
 
 def test_bootstrap_returns_every_app_in_tab_order():
     data = Api().bootstrap()["data"]
-    assert [app["id"] for app in data["apps"]] == [APP_CLAUDE, APP_CLAUDE_DESKTOP, APP_CODEX]
-    assert [app["label"] for app in data["apps"]] == ["Claude Code", "Claude Desktop", "Codex"]
-    assert set(data["state"]) == {APP_CLAUDE, APP_CLAUDE_DESKTOP, APP_CODEX}
+    every_app = [APP_CLAUDE, APP_CLAUDE_DESKTOP, APP_CODEX, APP_HERMES, APP_OPENCODE]
+    assert [app["id"] for app in data["apps"]] == every_app
+    assert [app["label"] for app in data["apps"]] == [
+        "Claude Code",
+        "Claude Desktop",
+        "Codex",
+        "Hermes",
+        "OpenCode",
+    ]
+    assert set(data["state"]) == set(every_app)
     assert data["state"][APP_CLAUDE]["providers"][0]["official"] is True
 
 

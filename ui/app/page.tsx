@@ -14,16 +14,28 @@ import type {
   AppPaths,
   AppSettings,
   AppState,
+  CliVersions,
   EnvInfo,
   HealthResult,
   ProviderDetail,
   ProviderSummary,
+  SessionSummary,
   UpdateStatus,
 } from "@/lib/types";
 
 type View = { mode: "list" } | { mode: "form"; provider: ProviderDetail | null };
 
 const EMPTY_STATE: AppState = { current: "", providers: [], files: [] };
+
+/**
+ * The apps whose transcripts U-Pool knows how to find. Hermes and OpenCode have
+ * tabs but are absent on purpose - the backend refuses them, and a delete button
+ * that guesses at a path is the one kind of guess this feature must not make.
+ */
+const SESSION_APPS: Record<string, string> = {
+  claude: "Claude Code",
+  codex: "Codex",
+};
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -56,6 +68,11 @@ export default function Page() {
   // Generation counter so a slow settings read cannot land on top of a newer write.
   const settingsRead = useRef(0);
   const [update, setUpdate] = useState<UpdateStatus | null>(null);
+  const [clis, setClis] = useState<CliVersions | null>(null);
+  const [sessions, setSessions] = useState<Record<string, SessionSummary>>({});
+  const [deletingSessions, setDeletingSessions] = useState("");
+  const [sessionErrors, setSessionErrors] = useState<Record<string, string[]>>({});
+  const [pendingPurge, setPendingPurge] = useState<string | null>(null);
   const [paths, setPaths] = useState<AppPaths | null>(null);
   const [meta, setMeta] = useState({ version: "", platform: "" });
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -81,6 +98,7 @@ export default function Page() {
         setMeta({ version: data.version, platform: data.platform });
         setSettings(data.settings);
         setUpdate(data.update);
+        setClis(data.clis);
         // Checked only once the bridge has resolved, otherwise pywebview's
         // late API injection would look like a missing backend.
         setMockBridge(isMockBridge());
@@ -291,6 +309,16 @@ export default function Page() {
     backend.openEnvSettings().catch((error) => push("error", message(error)));
   }, [push]);
 
+  const readSessions = useCallback((target?: string) => {
+    const wanted = target ? [target] : Object.keys(SESSION_APPS);
+    for (const id of wanted) {
+      backend
+        .sessionSummary(id as AppId)
+        .then((next) => setSessions((current) => ({ ...current, [id]: next })))
+        .catch(() => undefined);
+    }
+  }, []);
+
   const openSettings = useCallback(() => {
     setSettingsOpen(true);
     // Windows can have switched the startup entry off since the last look.
@@ -300,7 +328,62 @@ export default function Page() {
       .then((next) => token === settingsRead.current && setSettings(next))
       .catch(() => undefined);
     backend.checkUpdates(false).then(setUpdate).catch(() => undefined);
-  }, []);
+    // Transcripts grow while the panel is closed, so the counts are measured on
+    // every open rather than cached from the last one.
+    readSessions();
+    backend.cliVersions().then(setClis).catch(() => undefined);
+  }, [readSessions]);
+
+  const handleRefreshClis = useCallback(() => {
+    backend
+      .refreshCliVersions()
+      .then(setClis)
+      .catch((error) => push("error", message(error)));
+  }, [push]);
+
+  // The probe runs on a background thread, so the answer arrives by polling -
+  // the same arrangement the update check uses. Keyed on `ready` as well as
+  // `busy`: a probe that finished between two polls flips busy back to false
+  // without the result ever having been read.
+  useEffect(() => {
+    if (!clis || (!clis.busy && clis.ready)) return;
+    const timer = setInterval(() => {
+      backend.cliVersions().then(setClis).catch(() => undefined);
+    }, 500);
+    return () => clearInterval(timer);
+  }, [clis?.busy, clis?.ready]);
+
+  const handleDeleteSessions = useCallback(
+    async (target: string) => {
+      setPendingPurge(null);
+      setDeletingSessions(target);
+      setSessionErrors((current) => ({ ...current, [target]: [] }));
+      try {
+        const result = await backend.deleteSessions(target as AppId);
+        setSessions((current) => ({ ...current, [target]: result.summary }));
+        setSessionErrors((current) => ({ ...current, [target]: result.errors }));
+        const label = SESSION_APPS[target] ?? target;
+        if (result.errors.length > 0) {
+          push(
+            "error",
+            `${label}: ${result.errors.length} left behind`,
+            "Close the CLI and try again — the rest were deleted.",
+          );
+        } else {
+          push(
+            "success",
+            `${label} sessions deleted`,
+            `${result.deleted.toLocaleString()} files removed.`,
+          );
+        }
+      } catch (error) {
+        push("error", message(error));
+      } finally {
+        setDeletingSessions("");
+      }
+    },
+    [push],
+  );
 
   // The registry is only read while the panel that shows it is open, and again
   // if the active app changes underneath it.
@@ -413,6 +496,7 @@ export default function Page() {
         apps={apps}
         activeApp={app}
         version={meta.version}
+        clis={clis}
         onSelectApp={(next) => {
           setApp(next);
           setView({ mode: "list" });
@@ -421,6 +505,7 @@ export default function Page() {
         onTestAll={handleTestAll}
         onOpenFolder={() => state.files[0] && openPath(state.files[0])}
         onOpenSettings={openSettings}
+        onRefreshClis={handleRefreshClis}
         testing={testing}
         canOpenFolder={state.files.length > 0}
         updateAvailable={
@@ -493,6 +578,43 @@ export default function Page() {
         </Modal>
       ) : null}
 
+      {pendingPurge ? (
+        <Modal
+          title={`Delete every ${SESSION_APPS[pendingPurge] ?? pendingPurge} conversation?`}
+          onClose={() => setPendingPurge(null)}
+          footer={
+            <>
+              <Button onClick={() => setPendingPurge(null)}>Cancel</Button>
+              <Button variant="danger" onClick={() => handleDeleteSessions(pendingPurge)}>
+                Delete {(sessions[pendingPurge]?.files ?? 0).toLocaleString()} files
+              </Button>
+            </>
+          }
+        >
+          <p>
+            This erases {(sessions[pendingPurge]?.files ?? 0).toLocaleString()} files for good.
+            Nothing is copied first and there is no undo.
+          </p>
+          <ul className="mt-3 space-y-1">
+            {(sessions[pendingPurge]?.entries ?? [])
+              .filter((entry) => entry.exists)
+              .map((entry) => (
+                <li
+                  key={entry.path}
+                  className="truncate font-mono text-[11px] text-[var(--color-secondary-label)]"
+                  title={entry.path}
+                >
+                  {entry.path}
+                </li>
+              ))}
+          </ul>
+          <p className="mt-3 text-[12px] text-[var(--color-tertiary-label)]">
+            Your settings, credentials, plugins and skills are in the same folders and are not
+            touched.
+          </p>
+        </Modal>
+      ) : null}
+
       {settingsOpen ? (
         <SettingsPanel
           version={meta.version}
@@ -501,6 +623,11 @@ export default function Page() {
           liveFiles={state.files}
           settings={settings}
           env={env}
+          clis={clis}
+          sessions={sessions}
+          sessionLabels={SESSION_APPS}
+          deletingSessions={deletingSessions}
+          sessionErrors={sessionErrors}
           savingSettings={savingSettings}
           update={update}
           onOpen={openPath}
@@ -511,6 +638,8 @@ export default function Page() {
           onInstallUpdate={handleInstallUpdate}
           onSkipUpdate={handleSkipUpdate}
           onToggleUpdateChecks={handleToggleUpdateChecks}
+          onRefreshClis={handleRefreshClis}
+          onDeleteSessions={setPendingPurge}
           onOpenExternal={(url) =>
             backend.openExternal(url).catch((error) => push("error", message(error)))
           }

@@ -39,6 +39,10 @@ const BYPASS_HINT: Record<ProviderSummary["app"], string> = {
   claude: "permission prompts are bypassed for this provider",
   claude_desktop: "permission prompts are bypassed for this provider",
   codex: "approvals and the sandbox are bypassed for this provider",
+  // Neither has a permission model U-Pool drives, so the badge never renders for
+  // them - the entry is here because the record is exhaustive, not because it shows.
+  hermes: "",
+  opencode: "",
 };
 
 /**

@@ -36,6 +36,27 @@ function MaskMark({
   );
 }
 
+/**
+ * A brand mark that has to keep its own artwork.
+ *
+ * `MaskMark` drives the shape from alpha, which is right for a flat glyph and
+ * wrong for anything with detail inside its silhouette: the Hermes logo is an
+ * opaque black-and-white illustration, so masking it renders a solid square.
+ */
+function ImageMark({ src, className, title }: MarkProps & { src: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- static export, no loader
+    <img
+      src={src}
+      alt=""
+      role="img"
+      aria-label={title}
+      title={title}
+      className={cx("inline-block shrink-0 rounded-[3px] object-contain", className)}
+    />
+  );
+}
+
 /** Map preset id → brand SVG under /brands. */
 const PRESET_ICON: Record<string, string> = {
   custom: "/brands/custom.svg",
@@ -53,6 +74,7 @@ const PRESET_ICON: Record<string, string> = {
   zhipu: "/brands/zhipu.svg",
   nvidia: "/brands/nvidia.svg",
   "opencode-go": "/brands/opencode.svg",
+  "kimi-for-coding": "/brands/kimi-coding.svg",
   mimo: "/brands/mimo.svg",
   azure: "/brands/azureai.svg",
   xai: "/brands/grok.svg",
@@ -60,6 +82,14 @@ const PRESET_ICON: Record<string, string> = {
 
 export function OpenAILogo({ className, title = "OpenAI" }: MarkProps) {
   return <MaskMark src="/brands/openai.svg" className={className} title={title} />;
+}
+
+export function OpenCodeLogo({ className, title = "OpenCode" }: MarkProps) {
+  return <MaskMark src="/brands/opencode.svg" className={className} title={title} />;
+}
+
+export function HermesLogo({ className, title = "Hermes" }: MarkProps) {
+  return <ImageMark src="/brands/hermes.png" className={className} title={title} />;
 }
 
 export function AnthropicLogo({ className, title = "Anthropic" }: MarkProps) {
