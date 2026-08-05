@@ -48,17 +48,39 @@ from pathlib import Path
 from .. import paths
 from ..models import UPoolError
 
-# Filled in from the sign-in diff described in the 0.8.0 spec, section 6: snapshot
-# state.vscdb while signed out, sign in to Cursor, snapshot again, and the
-# difference is this tuple.
+# Measured, not assumed. Cursor 3.14.7 was snapshotted signed out (100 ItemTable
+# rows), signed in, and snapshotted again (148): 50 rows appeared and 18 changed.
+# These are the ones that are the account rather than the session's window layout,
+# its theme or the 594 KB of server-pushed experiment config that arrived with them.
 #
-# Empty is deliberate. The machine this was designed on is signed out of Cursor,
-# so the key set it actually writes could not be observed, and putting the
-# ecosystem's guesses here - into a database holding the user's whole Cursor
-# history - is precisely what section 6 exists to prevent. Every function below is
-# written over this tuple and none of them names a key, so filling it in is the
-# entire change.
-AUTH_KEYS: tuple[str, ...] = ()
+# Two of these are not in any existing switcher, because they are new in the 3.x
+# "glass" builds: ``cachedScopedProfile`` (the display name and avatar the account
+# menu draws) and ``stripeSubscriptionStatus`` (which is separate from
+# ``stripeMembershipType`` - the pair reads "free" / "unpaid" on this machine).
+#
+# ``glass.lastSignedInAuthId`` is a WIDENING of the claim as the 0.8.0 design wrote
+# it: that document says ``cursorAuth/*`` and nothing else, and this key sits
+# outside the prefix. It is here because the sign-in wrote it and it holds the same
+# identity the token does - ``auth0|user_01...``, matching the JWT's ``sub``. Left
+# alone, a switch would leave Cursor holding account B's token beside account A's
+# id, and a disagreement between those two is not a state any measurement showed
+# Cursor in. It is one key, named in full, and it is the only one outside the prefix.
+#
+# ``cursorAuth/onboardingDate`` is deliberately NOT owned, though the sign-in wrote
+# it too. U-Pool cannot produce it - a pasted cookie does not carry one - so owning
+# it would mean blanking it on every switch, and a blank onboarding date is how you
+# ask Cursor to run onboarding again. Leaving the previous account's date costs
+# nothing; the narrower claim wins.
+AUTH_KEYS: tuple[str, ...] = (
+    "cursorAuth/accessToken",
+    "cursorAuth/refreshToken",
+    "cursorAuth/cachedEmail",
+    "cursorAuth/cachedSignUpType",
+    "cursorAuth/cachedScopedProfile",
+    "cursorAuth/stripeMembershipType",
+    "cursorAuth/stripeSubscriptionStatus",
+    "glass.lastSignedInAuthId",
+)
 
 # The caller guarantees Cursor is closed, so this is not a lock to wait out - it
 # is long enough to ride over the last flush of a process that just exited, and

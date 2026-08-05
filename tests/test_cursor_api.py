@@ -375,6 +375,96 @@ def test_request_counts_without_a_ceiling_still_show_something(net):
     assert facts.usage_unit == UNIT_REQUESTS
 
 
+# ---------------------------------------------------- what the live API returns
+#
+# Everything above is a shape somebody reasoned their way to. These three are
+# transcripts: the exact bodies cursor.com returned on 2026-08-06 for a signed-in
+# account, trimmed of nothing that matters. They are the only fixtures here that
+# are evidence rather than argument, and the first two nest their figures two
+# levels down - which the extractor missed until this measurement was taken.
+
+LIVE_SUMMARY = {
+    "billingCycleStart": "2026-07-14T00:08:52.258Z",
+    "billingCycleEnd": "2026-08-14T00:08:52.258Z",
+    "membershipType": "free",
+    "limitType": "user",
+    "isUnlimited": False,
+    "individualUsage": {
+        "plan": {
+            "enabled": True,
+            "used": 14,
+            "limit": 20,
+            "remaining": 6,
+            "breakdown": {"included": 20, "bonus": 0, "total": 20},
+            "autoPercentUsed": 70,
+            "apiPercentUsed": 0,
+            "totalPercentUsed": 70,
+        },
+        "onDemand": {"enabled": False, "used": 99, "limit": None, "remaining": None},
+    },
+    "teamUsage": {},
+}
+LIVE_STRIPE = {
+    "membershipType": "free",
+    "paymentId": "cus_ABC",
+    "subscriptionStatus": "unpaid",
+    "verifiedStudent": True,
+    "isTeamMember": False,
+    "teamMembershipType": None,
+    "individualMembershipType": "free",
+    "isYearlyPlan": False,
+}
+LIVE_LEGACY = {
+    "gpt-4": {
+        "numRequests": 0,
+        "numRequestsTotal": 0,
+        "numTokens": 0,
+        "maxTokenUsage": None,
+        "maxRequestUsage": None,
+    },
+    "startOfMonth": "2026-07-14T00:08:52.258Z",
+}
+
+
+def test_the_live_summary_shape_is_read_two_levels_down(net):
+    """``individualUsage.plan`` - the walk stopped at the wrapper before 0.8.0."""
+    net.routes.update(summary=LIVE_SUMMARY)
+    facts = api.fetch(account())
+    assert (facts.usage_used, facts.usage_limit) == (14, 20)
+    assert facts.usage_unit == UNIT_USD
+    assert facts.usage_percent == 70.0
+
+
+def test_the_on_demand_bucket_is_not_mistaken_for_the_plan(net):
+    """``onDemand.used`` is a different number under the same key name.
+
+    It is reachable only if ``onDemand`` joins the section list, which is why that
+    list is a fixed set of names rather than a walk of the document.
+    """
+    net.routes.update(summary=LIVE_SUMMARY)
+    assert api.fetch(account()).usage_used == 14
+
+
+def test_a_free_account_with_no_quota_reports_zeroes_rather_than_nothing(net):
+    """The measured account: a real answer that happens to be all zeroes.
+
+    Reporting it as unknown would be wrong in the other direction - the endpoint
+    did answer, and "0 of 0" is what it said.
+    """
+    summary = json.loads(json.dumps(LIVE_SUMMARY))
+    summary["individualUsage"]["plan"].update(used=0, limit=0, remaining=0, totalPercentUsed=0)
+    net.routes.update(summary=summary, usage=LIVE_LEGACY)
+    facts = api.fetch(account())
+    assert (facts.usage_used, facts.usage_limit) == (0, 0)
+    assert facts.usage_unit == UNIT_USD
+
+
+def test_the_live_stripe_shape_gives_the_plan_and_its_status(net):
+    net.routes.update(stripe=LIVE_STRIPE)
+    facts = api.fetch(account())
+    assert (facts.plan, facts.plan_status) == ("free", "unpaid")
+
+
 # ------------------------------------------------------------ identity + plan
 
 

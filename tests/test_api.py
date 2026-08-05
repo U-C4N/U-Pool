@@ -430,15 +430,16 @@ def test_refreshing_an_account_that_is_gone_is_an_envelope_not_a_crash():
 
 
 def test_cursor_use_surfaces_a_refusal_instead_of_raising():
-    from upool.cursor.switch import PENDING_KEYS_NOTE
-
     api = Api()
     row = api.cursor_add(cookie("user_01AB", "token-a"))["data"]["state"]["accounts"][0]
 
-    # The key list Cursor writes on sign-in has not been measured yet, so the
-    # switch refuses before it touches the editor - and the bridge renders that
-    # as an envelope rather than letting it reach the webview.
-    assert api.cursor_use(row["id"]) == {"ok": False, "error": PENDING_KEYS_NOTE}
+    # The sandbox has no Cursor database, so the switch refuses before it touches
+    # the editor - and the bridge renders that as an envelope rather than letting
+    # it reach the webview. Which refusal fires is the switch's business; that one
+    # arrives as {"ok": false} instead of an exception is this test's.
+    refused = api.cursor_use(row["id"])
+    assert refused["ok"] is False
+    assert "open Cursor once" in refused["error"]
     assert api.cursor_state()["data"]["current"] == ""
     assert api.cursor_use("no-such-account")["ok"] is False
 

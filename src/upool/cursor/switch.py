@@ -26,6 +26,9 @@ The confirmation - "Cursor will be closed. Continue?" - belongs to the UI.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 from dataclasses import dataclass, field
 
 from .. import backup, paths
@@ -35,11 +38,12 @@ from . import process, vscdb
 from .models import STATUS_EXPIRED, CursorAccount
 from .store import CursorStore
 
-PENDING_KEYS_NOTE = (
-    "U-Pool does not yet know which keys Cursor writes when it signs in, so "
-    "nothing was closed and nothing was written. That list comes from the "
-    "sign-in diff in the 0.8.0 design, section 6."
-)
+# What the sign-in snapshot held in ``cursorAuth/cachedSignUpType``, and the prefix
+# its JWT subject carried. Constants rather than literals inline because they are
+# the two things in this module that came from one machine's measurement and would
+# be the first suspects if a future Cursor signed in differently.
+SIGN_UP_TYPE = "Auth_0"
+AUTH_PREFIX = "auth0|"
 
 
 @dataclass
@@ -74,9 +78,6 @@ def use(account_id: str, pool: CursorStore | None = None) -> SwitchOutcome:
     _refuse_unswitchable(account)
 
     values = _auth_values(account)
-    if not values:
-        raise UPoolError(PENDING_KEYS_NOTE)
-
     db = paths.cursor_state_db()
     if not db.is_file():
         raise UPoolError(f"Cursor has no database at {db} yet - open Cursor once, then try again.")
@@ -142,19 +143,90 @@ def _label(account: CursorAccount) -> str:
 
 
 def _auth_values(account: CursorAccount) -> dict[str, str]:
-    """What Cursor's owned keys should hold for ``account`` - the other half of a
-    measurement that has not been taken yet.
+    """What Cursor's owned keys should hold for ``account``.
 
     ``vscdb.AUTH_KEYS`` is which keys a sign-in writes; this is what goes in them.
-    Both come out of the same diff described in the 0.8.0 design, section 6 -
-    snapshot ``state.vscdb`` signed out, sign in to Cursor, snapshot again - and
-    neither may be filled in from the ecosystem's guesses at it. Until that
-    happens this returns nothing, :func:`use` refuses rather than reporting a
-    switch that wrote nothing, and the mapping when it lands is a dict literal
-    here and a tuple there.
+    Both halves come out of the same measurement - the 0.8.0 design, section 6 -
+    and the shapes below are what that snapshot actually contained, not what the
+    field names suggest. In particular the values are stored **raw**: Cursor
+    writes ``umutday11@gmail.com``, not ``"umutday11@gmail.com"``, so nothing here
+    is JSON-encoded except ``cachedScopedProfile``, which really is a JSON object.
+
+    ``accessToken`` and ``refreshToken`` are byte-identical in the snapshot - one
+    413-character session JWT in both - so both are written from the one token the
+    cookie carried. A cookie is all a pooled account has; there is no second
+    credential to put in the second key.
+
+    The identity fields are written even when the refresh has not filled them in,
+    and written **empty** rather than skipped. Skipping leaves the previous
+    account's name and email sitting under the new account's token, which is worse
+    than a blank card: it is the wrong person's card. Cursor re-fetches them from
+    the token on its next start.
 
     Nothing is filtered against ``AUTH_KEYS`` on the way out. A key with a value
     but no ownership must reach ``vscdb.write_auth`` and be refused loudly there;
     dropping it quietly is how a switch half-applies.
     """
-    return {}
+    return {
+        "cursorAuth/accessToken": account.token,
+        "cursorAuth/refreshToken": account.token,
+        "cursorAuth/cachedEmail": account.email,
+        # Constant in the snapshot, and constant across upstream identity
+        # providers: Cursor fronts Google and GitHub with Auth0 too, which is why
+        # the JWT subject is ``auth0|…`` for an account that never saw an Auth0
+        # login form.
+        "cursorAuth/cachedSignUpType": SIGN_UP_TYPE,
+        "cursorAuth/cachedScopedProfile": _scoped_profile(account),
+        "cursorAuth/stripeMembershipType": account.plan,
+        "cursorAuth/stripeSubscriptionStatus": account.plan_status,
+        "glass.lastSignedInAuthId": _auth_id(account),
+    }
+
+
+def _scoped_profile(account: CursorAccount) -> str:
+    """The JSON blob the account menu draws its name and avatar from.
+
+    ``pictureUrl`` is omitted rather than written empty when it is unknown, which
+    it always is - a cookie carries no avatar and ``/api/auth/me`` was not asked
+    for one. An absent key leaves Cursor to fall back to initials; an empty string
+    is a URL it would try to load and fail.
+    """
+    if not account.name:
+        return ""
+    return json.dumps({"displayName": account.name}, separators=(",", ":"))
+
+
+def _auth_id(account: CursorAccount) -> str:
+    """The ``auth0|user_…`` identity, read out of the token rather than rebuilt.
+
+    The session JWT's ``sub`` claim is exactly what the snapshot found in
+    ``glass.lastSignedInAuthId``, so taking it from there is a copy rather than a
+    guess. The fallback assembles it from the cookie's own user id, which is the
+    same string without the provider prefix - correct for every account measured,
+    but an assumption, so it is second.
+    """
+    payload = _jwt_payload(account.token)
+    subject = payload.get("sub")
+    if isinstance(subject, str) and subject:
+        return subject
+    return f"{AUTH_PREFIX}{account.user_id}" if account.user_id else ""
+
+
+def _jwt_payload(token: str) -> dict[str, object]:
+    """The middle segment of a JWT, or ``{}`` for anything that is not one.
+
+    No signature check: this is not a trust decision. The token came from the
+    user's own paste, it is on its way into their own editor, and the one field
+    read from it is an identifier that will be checked by cursor.com in a moment
+    anyway.
+    """
+    parts = token.split(".")
+    if len(parts) != 3:
+        return {}
+    segment = parts[1]
+    try:
+        raw = base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
+        payload = json.loads(raw)
+    except (ValueError, binascii.Error):
+        return {}
+    return payload if isinstance(payload, dict) else {}

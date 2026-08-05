@@ -212,6 +212,10 @@ PLAN_SECTIONS = ("subscription", "membership", "plan", "data")
 USAGE_SECTIONS = (
     "planUsage",
     "plan_usage",
+    # The live payload nests the figures two deep as ``individualUsage.plan``, so
+    # both halves have to be listed - without the second the walk stops on the
+    # wrapper and the card reports nothing on an account that has numbers.
+    "plan",
     "usage",
     "individualUsage",
     "individual_usage",

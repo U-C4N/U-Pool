@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import sqlite3
 from pathlib import Path
 
@@ -209,23 +210,58 @@ def test_an_account_that_is_not_in_the_pool_is_refused(measured, db, pool, monke
     assert calls == []
 
 
-def test_the_unmeasured_key_list_refuses_before_anything_is_touched(db, pool, monkeypatch):
-    """No ``measured`` fixture: this is the state the code is in today.
+def test_every_measured_key_gets_a_value(pool):
+    """``_auth_values`` and ``vscdb.AUTH_KEYS`` are two halves of one measurement.
 
-    ``vscdb.write_auth({})`` is a no-op that returns cleanly, so without this
-    guard every switch would report success while the editor stayed signed in as
-    somebody else.
+    They are written in different files and nothing but this test makes them agree.
+    A key added to one and forgotten in the other is a switch that half-applies -
+    which ``write_auth`` refuses outright in one direction, and silently leaves the
+    previous account's value in place in the other.
     """
-    calls = record(monkeypatch, running=True)
-    account = first(pool)
+    assert set(switch._auth_values(first(pool))) == set(vscdb.AUTH_KEYS)
 
-    with pytest.raises(UPoolError, match="section 6"):
-        switch.use(account.id, pool)
 
-    assert switch._auth_values(account) == {}
-    assert calls == []
-    assert pool.current_id() == ""
-    assert not db.with_name(db.name + ".backup").exists()
+def test_an_unknown_name_or_plan_is_written_blank_rather_than_skipped(pool):
+    """A refresh that never ran must not leave the previous account's identity.
+
+    Skipping the key would keep whatever the last sign-in wrote, so the account
+    menu would show the old person's name over the new person's token. Empty is
+    the honest version, and Cursor refills it from the token on next start.
+    """
+    account = CursorAccount(user_id="user_09ZZ", token="eyJ-nine")
+    values = switch._auth_values(account)
+
+    assert values["cursorAuth/cachedEmail"] == ""
+    assert values["cursorAuth/cachedScopedProfile"] == ""
+    assert values["cursorAuth/stripeMembershipType"] == ""
+    assert set(values) == set(vscdb.AUTH_KEYS)
+
+
+def test_the_auth_id_is_read_out_of_the_token_not_rebuilt_from_the_cookie():
+    """The JWT's ``sub`` is what the sign-in snapshot put in that key verbatim.
+
+    The fallback assembles the same string from the cookie's user id, which held
+    for every account measured - but a provider prefix other than ``auth0|`` would
+    break it, so the token wins whenever it parses.
+    """
+    payload = base64.urlsafe_b64encode(b'{"sub":"github|user_07GG"}').rstrip(b"=").decode()
+    account = CursorAccount(user_id="user_07GG", token=f"eyJhbGciOiJI.{payload}.signature")
+
+    assert switch._auth_values(account)["glass.lastSignedInAuthId"] == "github|user_07GG"
+
+
+def test_a_token_that_is_not_a_jwt_falls_back_to_the_cookie_user_id():
+    account = CursorAccount(user_id="user_08HH", token="not-a-jwt-at-all")
+
+    assert switch._auth_values(account)["glass.lastSignedInAuthId"] == "auth0|user_08HH"
+
+
+def test_the_two_token_keys_hold_the_same_credential(pool):
+    """The snapshot found one 413-character JWT in both, and a cookie carries one
+    token - there is no second credential to put in the second key."""
+    values = switch._auth_values(first(pool))
+
+    assert values["cursorAuth/accessToken"] == values["cursorAuth/refreshToken"] != ""
 
 
 def test_a_machine_with_no_cursor_database_is_refused_before_the_close(
