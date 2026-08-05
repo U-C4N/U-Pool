@@ -114,6 +114,60 @@ def use(account_id: str, pool: CursorStore | None = None) -> SwitchOutcome:
     return SwitchOutcome(result=result, closed_cursor=closed, relaunched=relaunched)
 
 
+def live_account() -> CursorAccount | None:
+    """The account Cursor is signed in as right now, assembled from its own keys.
+
+    The exact inverse of :func:`_auth_values`, and here rather than in
+    :mod:`upool.api` so the two directions of one measurement stay in one file: a
+    key that moves has to move twice, and both edits are on the same screen.
+
+    It reads the named keys rather than running the stored values through the
+    paste parser, because the measurement settled what that parser cannot know -
+    **Cursor does not store the credential in cookie form.** The token sits bare
+    in ``accessToken`` with no ``user_id::`` in front of it, and the identity is a
+    separate row. A parser looking for a cookie finds nothing here, every time.
+
+    ``None`` when Cursor is signed out, which is the whole of what "no account to
+    adopt" means - a signed-out Cursor has these rows empty rather than absent.
+    """
+    stored = vscdb.read_auth()
+    token = stored.get("cursorAuth/accessToken", "").strip()
+    if not token:
+        return None
+
+    auth_id = stored.get("glass.lastSignedInAuthId", "")
+    subject = _jwt_payload(token).get("sub")
+    identity = subject if isinstance(subject, str) and subject else auth_id
+    user_id = identity.split("|", 1)[-1]
+    if not user_id:
+        return None
+
+    profile = _parse_profile(stored.get("cursorAuth/cachedScopedProfile", ""))
+    return CursorAccount(
+        user_id=user_id,
+        token=token,
+        email=stored.get("cursorAuth/cachedEmail", ""),
+        name=str(profile.get("displayName") or ""),
+        avatar=str(profile.get("pictureUrl") or ""),
+        plan=stored.get("cursorAuth/stripeMembershipType", ""),
+        plan_status=stored.get("cursorAuth/stripeSubscriptionStatus", ""),
+    )
+
+
+def _parse_profile(raw: str) -> dict[str, object]:
+    """``cachedScopedProfile`` as a mapping, or empty for anything else.
+
+    The one owned key that is JSON rather than a bare string, and the one that a
+    future Cursor is most likely to reshape - so a blob that no longer parses
+    costs the display name and nothing else.
+    """
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def _refuse_unswitchable(account: CursorAccount) -> None:
     """Both ways an account in the pool is still not one Cursor can be signed in as.
 

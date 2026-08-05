@@ -468,35 +468,42 @@ class Api:
             traceback.print_exc()
 
     def _adopt_live_session(self) -> None:
-        """First run: put the account Cursor is already signed in as into the pool.
+        """Put the account Cursor is signed in as into the pool, if it is not there.
 
-        Without it the first switch would throw away a session the user has no
-        other copy of - the pool would hold only what they pasted, the editor's
-        own account would be overwritten, and there would be nothing to switch
-        back to. ``Store._first_entries`` imports a live provider setup on first
-        run for exactly this reason.
+        Without it a switch throws away a session the user has no other copy of:
+        the pool holds only what they pasted, the editor's own account is
+        overwritten, and there is nothing to switch back to.
+        ``Store._first_entries`` imports a live provider setup for exactly this
+        reason.
 
-        The stored values go through the paste parser rather than being read out
-        of a named field, because which key holds the credential - and whether it
-        holds it in cookie form at all - is the section 6 measurement
-        ``vscdb.AUTH_KEYS`` is still waiting for. So this imports nothing today,
-        and starts working the moment that tuple names a key whose value is a
-        session token, with no second place to update.
+        The test is **whether that user id is pooled**, not whether the pool is
+        empty. Empty was the obvious rule and it defeats the purpose: paste one
+        cookie before U-Pool has ever seen the editor - which is the first thing
+        anybody does - and the live session is never adopted, so the first Use
+        destroys it. Add-only and keyed on ``user_id``, so it cannot duplicate a
+        row and cannot overwrite a token that was pasted for the same account.
+
+        The cost is that deleting the signed-in account brings it back next
+        launch. That is the right way round: a row you delete twice is a
+        nuisance, and a credential with no other copy is gone.
+
+        The assembly is :func:`upool.cursor.switch.live_account`, next to the
+        function that writes those same keys. An earlier version ran the stored
+        values through the paste parser, on the theory that one of them would be
+        a cookie; the sign-in measurement settled that none of them is. Cursor
+        keeps the token bare and the identity in a separate row, so the parser
+        found nothing on every start - which is what an unmeasured guess looks
+        like when it is wrong.
         """
         try:
-            if self._cursor.list_accounts():
+            live = cursorswitch.live_account()
+            if live is None:
                 return
-            found = cursorparse.parse("\n".join(cursorvscdb.read_auth().values())).accounts
-            if not found:
+            pooled = self._cursor.list_accounts()
+            if any(existing.user_id == live.user_id for existing in pooled):
                 return
-            account, _ = self._cursor.upsert(
-                CursorAccount(
-                    user_id=found[0].user_id,
-                    token=found[0].token,
-                    email=found[0].email,
-                    name=LIVE_SESSION_NAME,
-                )
-            )
+            live.name = live.name or LIVE_SESSION_NAME
+            account, _ = self._cursor.upsert(live)
             # Cursor wrote that database itself, so this records what is in it
             # rather than claiming a switch happened - which is what set_current
             # is for. The only caller outside switch.py entitled to say it.

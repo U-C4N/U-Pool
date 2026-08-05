@@ -429,6 +429,70 @@ def test_refreshing_an_account_that_is_gone_is_an_envelope_not_a_crash():
     }
 
 
+def signed_in_cursor(user_id: str = "user_01LIVE", token: str = "eyJ.live.sig") -> None:
+    """A ``state.vscdb`` holding a session, written the way Cursor writes one."""
+    import sqlite3
+
+    from upool.cursor import switch as cursorswitch
+    from upool.cursor import vscdb as cursorvscdb
+    from upool.cursor.models import CursorAccount
+
+    path = paths.cursor_state_db()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(path)
+    with connection:
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)"
+        )
+    connection.close()
+    account = CursorAccount(user_id=user_id, token=token, email="live@example.com", name="Live One")
+    cursorvscdb.write_auth(cursorswitch._auth_values(account), path)
+
+
+def test_the_signed_in_account_is_adopted_into_an_empty_pool():
+    signed_in_cursor()
+    api = Api()
+    api.bootstrap()
+
+    accounts = api.cursor_state()["data"]["accounts"]
+    assert [a["user_id"] for a in accounts] == ["user_01LIVE"]
+    assert accounts[0]["active"] is True
+
+
+def test_the_signed_in_account_is_adopted_even_when_the_pool_is_not_empty():
+    """The rule is "not pooled", not "pool is empty".
+
+    Pasting a cookie before U-Pool has ever seen the editor is the first thing
+    anybody does. Under an emptiness test that one paste would stop the live
+    session ever being adopted, and the first Use would overwrite a credential
+    with no other copy.
+    """
+    signed_in_cursor()
+    api = Api()
+    api.cursor_add(cookie("user_01PASTED", "token-p"))
+    api.bootstrap()
+
+    pooled = {a["user_id"] for a in api.cursor_state()["data"]["accounts"]}
+    assert pooled == {"user_01PASTED", "user_01LIVE"}
+
+
+def test_the_signed_in_account_is_adopted_once_and_not_duplicated():
+    signed_in_cursor()
+    api = Api()
+    api.bootstrap()
+    api.bootstrap()
+
+    accounts = api.cursor_state()["data"]["accounts"]
+    assert [a["user_id"] for a in accounts] == ["user_01LIVE"]
+
+
+def test_a_signed_out_cursor_leaves_the_pool_alone():
+    api = Api()
+    api.bootstrap()
+
+    assert api.cursor_state()["data"]["accounts"] == []
+
+
 def test_cursor_use_surfaces_a_refusal_instead_of_raising():
     api = Api()
     row = api.cursor_add(cookie("user_01AB", "token-a"))["data"]["state"]["accounts"][0]

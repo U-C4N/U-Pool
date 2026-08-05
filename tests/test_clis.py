@@ -229,3 +229,30 @@ def test_the_refresh_endpoint_answers_immediately(monkeypatch):
         clis._worker.join(timeout=5)
     tools = api.cli_versions()["data"]["tools"]
     assert [tool["version"] for tool in tools] == ["9.9.9", "9.9.9"]
+
+
+def test_a_second_unforced_refresh_over_a_warm_cache_does_not_deadlock(monkeypatch):
+    """``refresh_async`` used to call ``snapshot`` while holding the same
+    non-reentrant lock ``snapshot`` takes.
+
+    Cold, the branch is skipped and nothing notices. Warm, the process stops dead
+    - and the second call is not exotic: every ``Api.bootstrap`` after the first
+    makes it, so reloading the webview hung the app with a blank window and no
+    error anywhere. The assertion is that this test returns at all; it is run on a
+    timer because a deadlocked pytest reports nothing.
+    """
+    monkeypatch.setattr(clis, "probe", lambda name, label="": {
+        "id": name, "label": label, "version": "1.0.0", "path": "", "found": True, "error": ""
+    })
+    clis.refresh_async(force=True)
+    clis.join_worker(timeout=5)
+    assert clis.snapshot()["ready"] is True
+
+    done = threading.Event()
+
+    def second() -> None:
+        clis.refresh_async(force=False)
+        done.set()
+
+    threading.Thread(target=second, daemon=True).start()
+    assert done.wait(timeout=10), "refresh_async(force=False) deadlocked against snapshot()"

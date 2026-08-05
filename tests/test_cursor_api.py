@@ -81,9 +81,10 @@ class _Response:
 class _Net:
     """Stands in for ``urllib.request.urlopen``; the suite opens no socket.
 
-    A route is a payload (answered as 200 JSON), an ``int`` (that HTTP status),
-    a callable returning an exception (raised), or ``bytes`` (a 200 whose body is
-    whatever that is).
+    A route is a payload (answered as 200 JSON), an ``int`` (that HTTP *error*
+    status), a callable returning an exception (raised), ``bytes`` (a 200 whose
+    body is whatever that is), or a ready-made :class:`_Response` - which is how
+    a *successful* non-200 is expressed, since ``urlopen`` does not raise on one.
     Calls are recorded so a test can assert what was *not* asked - the legacy
     usage endpoint is meant to stay unasked most of the time.
     """
@@ -105,6 +106,8 @@ class _Net:
             answer = self.routes[_which(url)]
         except KeyError:  # pragma: no cover - a test that forgot a route
             raise AssertionError(f"no route for {url}") from None
+        if isinstance(answer, _Response):
+            return answer
         if callable(answer):
             # A factory, so a test that fails every call raises a fresh exception
             # into each of the three threads rather than one shared object.
@@ -492,6 +495,39 @@ def test_the_avatar_comes_back_from_the_identity_call(net):
 def test_an_identity_call_with_no_picture_reports_no_avatar(net):
     net.routes.update(me={"email": "a@example.com", "name": "A", "picture": None})
     assert api.fetch(account()).avatar is None
+
+
+def test_a_204_from_the_identity_call_is_a_rejection(net):
+    """Measured against a revoked cookie, a made-up one and no cookie at all.
+
+    ``/api/auth/me`` answers 204 with an empty body for all three, where a working
+    cookie gets 200 and a body. Read as a malformed answer it would leave the card
+    saying "could not refresh" about an account that is simply signed out.
+    """
+    net.routes.update(me=no_session(), stripe=no_session(), summary=no_session())
+    assert api.fetch(account()).status == STATUS_EXPIRED
+    # And the legacy endpoint is not tried afterwards. It would have answered -
+    # its route is still the healthy fixture - and one endpoint answering is what
+    # makes an account ok, so asking would have revived a cookie cursor.com just
+    # refused three times.
+    assert net.asked("usage") == []
+
+
+def test_a_204_anywhere_else_is_not_a_rejection(net):
+    """One endpoint's habit, not an HTTP convention.
+
+    A 204 from the plan or usage call says nothing about the cookie, and an
+    account that answered its identity call is signed in whatever the others do.
+    """
+    net.routes.update(stripe=no_session(), summary=no_session())
+    facts = api.fetch(account())
+    assert facts.status == STATUS_OK
+    assert facts.email == ME["email"]
+
+
+def no_session() -> "_Response":
+    """What cursor.com sends when it does not know you: 204, no body."""
+    return _Response(None, status=api.NO_SESSION, body=b"")
 
 
 # ------------------------------------------------------------ identity + plan

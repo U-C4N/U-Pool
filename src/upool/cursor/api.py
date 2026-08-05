@@ -70,6 +70,13 @@ SUMMARY_LABEL = "usage endpoint"
 USAGE_LABEL = "request-usage endpoint"
 
 REJECTED = (401, 403)
+# ``/api/auth/me`` does not answer 401 when it does not know you - it answers
+# 204 with an empty body, and does so identically for a revoked cookie, a made-up
+# one and no cookie at all. Measured against all three; a working cookie gets 200
+# with a body from the same call. It is listed separately from ``REJECTED``
+# because it is one endpoint's habit rather than an HTTP convention, and reading
+# 204 as "no user" anywhere else would be wrong.
+NO_SESSION = 204
 REJECTED_MESSAGE = "Cursor rejected the session cookie - it has expired or been signed out."
 
 # Fields a refresh can fill in. Anything not listed here is ours rather than
@@ -141,6 +148,9 @@ class _Answer:
     data: Any = None
     code: int | None = None
     problem: str = ""
+    # Whether this was the identity call, which is the only one whose 204 means
+    # anything. See :data:`NO_SESSION`.
+    identity: bool = False
 
     @property
     def ok(self) -> bool:
@@ -148,10 +158,10 @@ class _Answer:
 
     @property
     def rejected(self) -> bool:
-        return self.code in REJECTED
+        return self.code in REJECTED or (self.code == NO_SESSION and self.identity)
 
 
-def _get(url: str, cookie: str, timeout: float, label: str) -> _Answer:
+def _get(url: str, cookie: str, timeout: float, label: str, identity: bool = False) -> _Answer:
     """A GET as this account, turned into an :class:`_Answer` whatever happens.
 
     The failure taxonomy is the design's: ``401``/``403`` is the token being
@@ -171,8 +181,10 @@ def _get(url: str, cookie: str, timeout: float, label: str) -> _Answer:
             code = getattr(response, "status", None)
     except urllib.error.HTTPError as exc:
         if exc.code in REJECTED:
-            return _Answer(code=exc.code, problem=REJECTED_MESSAGE)
-        return _Answer(code=exc.code, problem=f"Cursor's {label} answered HTTP {exc.code}.")
+            return _Answer(code=exc.code, problem=REJECTED_MESSAGE, identity=identity)
+        return _Answer(
+            code=exc.code, problem=f"Cursor's {label} answered HTTP {exc.code}.", identity=identity
+        )
     except urllib.error.URLError as exc:
         reason = exc.reason
         if isinstance(reason, ssl.SSLError):
@@ -190,12 +202,19 @@ def _get(url: str, cookie: str, timeout: float, label: str) -> _Answer:
     except Exception as exc:  # noqa: BLE001 - a refresh must never crash the UI
         return _Answer(problem=f"The {label} could not be read: {type(exc).__name__}: {exc}")
 
+    if identity and code == NO_SESSION:
+        # Ahead of the JSON attempt, which would otherwise report an empty body
+        # as a malformed one and hide the only thing this answer actually said.
+        return _Answer(code=code, problem=REJECTED_MESSAGE, identity=identity)
+
     try:
         payload = json.loads(body.decode("utf-8"))
     except (ValueError, UnicodeDecodeError):
         # HTML from a captive portal or a maintenance page reaches here.
-        return _Answer(code=code, problem=f"Cursor's {label} did not answer with JSON.")
-    return _Answer(data=payload, code=code)
+        return _Answer(
+            code=code, problem=f"Cursor's {label} did not answer with JSON.", identity=identity
+        )
+    return _Answer(data=payload, code=code, identity=identity)
 
 
 # ------------------------------------------------------------------ extraction
@@ -462,9 +481,15 @@ def fetch(account: CursorAccount, timeout: float = DEFAULT_TIMEOUT) -> AccountFa
 def _refresh(account: CursorAccount, facts: AccountFacts, timeout: float) -> None:
     """Fill ``facts`` in place from the four endpoints."""
     cookie = cookie_header(account)
-    calls = ((ME_URL, ME_LABEL), (STRIPE_URL, STRIPE_LABEL), (USAGE_SUMMARY_URL, SUMMARY_LABEL))
+    calls = (
+        (ME_URL, ME_LABEL, True),
+        (STRIPE_URL, STRIPE_LABEL, False),
+        (USAGE_SUMMARY_URL, SUMMARY_LABEL, False),
+    )
     with ThreadPoolExecutor(max_workers=CALL_WORKERS, thread_name_prefix="upool-cursor") as pool:
-        me, plan, summary = pool.map(lambda call: _get(call[0], cookie, timeout, call[1]), calls)
+        me, plan, summary = pool.map(
+            lambda call: _get(call[0], cookie, timeout, call[1], call[2]), calls
+        )
     answers = [me, plan, summary]
 
     if me.ok:
@@ -477,9 +502,12 @@ def _refresh(account: CursorAccount, facts: AccountFacts, timeout: float) -> Non
         used, limit, percent = _spend(summary.data)
     if used is not None or limit is not None:
         facts.usage_unit = UNIT_USD
-    elif percent is None and not summary.rejected:
+    elif percent is None and not any(answer.rejected for answer in answers):
         # The dollar endpoint knows nothing about this account, which is what a
-        # request-quota plan looks like. A rejected cookie is not asked twice.
+        # request-quota plan looks like. A rejected cookie is not asked twice -
+        # and rejected by *any* of the three, not just by this one: the identity
+        # call is the clearest no of the three, and a legacy endpoint that
+        # answers anyway would otherwise flip a dead account back to healthy.
         query = urllib.parse.urlencode({"user": account.user_id})
         legacy = _get(f"{USAGE_URL}?{query}", cookie, timeout, USAGE_LABEL)
         answers.append(legacy)

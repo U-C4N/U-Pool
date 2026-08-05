@@ -249,9 +249,14 @@ def refresh_async(force: bool = True) -> dict:
     if _busy():
         return snapshot()
     if not force:
+        # Read under the lock, answer outside it. ``snapshot`` takes the same
+        # non-reentrant lock, so calling it from in here deadlocked the process
+        # the moment a second ``force=False`` refresh met a warm cache - which is
+        # every ``bootstrap`` after the first, and a webview reload is one.
         with _lock:
-            if _cache is not None:
-                return snapshot()
+            cached = _cache is not None
+        if cached:
+            return snapshot()
 
     def run() -> None:
         global _cache

@@ -256,6 +256,52 @@ def test_a_token_that_is_not_a_jwt_falls_back_to_the_cookie_user_id():
     assert switch._auth_values(account)["glass.lastSignedInAuthId"] == "auth0|user_08HH"
 
 
+def test_the_live_session_is_assembled_from_the_named_keys(db, pool, monkeypatch):
+    """The round trip that ``Api._adopt_live_session`` depends on.
+
+    Cursor stores the token bare and the identity in a separate row, so nothing
+    in that database is a cookie. An earlier version ran these values through the
+    paste parser and found nothing, every start.
+    """
+    # Deliberately not ``record`` - that stubs ``vscdb.write_auth``, and this test
+    # is about a value surviving a real one.
+    stored = CursorAccount(
+        user_id="user_01AB",
+        token="eyJhbGciOiJI.eyJzdWIiOiJnaXRodWJ8dXNlcl8wMUFCIn0.sig",
+        email="a@example.com",
+        name="Umut Jan",
+        avatar="https://cdn/pic",
+        plan="pro",
+        plan_status="active",
+    )
+    vscdb.write_auth(switch._auth_values(stored), db)
+
+    live = switch.live_account()
+
+    assert live is not None
+    assert live.user_id == "user_01AB"
+    assert (live.email, live.name, live.avatar) == ("a@example.com", "Umut Jan", "https://cdn/pic")
+    assert (live.plan, live.plan_status) == ("pro", "active")
+    assert live.token == stored.token
+
+
+def test_a_signed_out_cursor_has_no_live_session(db):
+    """Signed out leaves the rows empty rather than absent, so "" is the whole test."""
+    assert switch.live_account() is None
+
+
+def test_a_provider_prefix_other_than_auth0_still_yields_the_cookie_user_id():
+    """Measured on a real second account: ``github|user_…``, not ``auth0|``.
+
+    The user id in the cookie is the subject without whichever prefix it carried,
+    so stripping by ``|`` is right and matching on ``auth0|`` would not be.
+    """
+    payload = base64.urlsafe_b64encode(b'{"sub":"github|user_07GG"}').rstrip(b"=").decode()
+    account = CursorAccount(user_id="user_07GG", token=f"eyJ.{payload}.sig", name="G")
+
+    assert switch._auth_values(account)["glass.lastSignedInAuthId"] == "github|user_07GG"
+
+
 def test_a_known_avatar_goes_into_the_profile_blob():
     """Cursor keeps the picture in the same blob as the name.
 
