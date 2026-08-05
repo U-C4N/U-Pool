@@ -76,6 +76,11 @@ class CursorAccount:
     # Filled by /api/auth/me, absent until it answers.
     email: str = ""
     name: str = ""
+    # Also from /api/auth/me, and stored for one reason: Cursor keeps the avatar
+    # in the same profile blob as the display name, so a switch that wrote only
+    # the name would drop the picture from the account menu. U-Pool's own cards
+    # never render it - see :meth:`summary`.
+    avatar: str = ""
 
     # Filled by /api/auth/stripe.
     plan: str = ""
@@ -110,6 +115,10 @@ class CursorAccount:
         """
         data = self.to_dict()
         data.pop("token", None)
+        # Held only to be written back into Cursor's own profile blob. Sending it
+        # would put a remote image URL in front of the webview for every card, to
+        # render something the card was never designed to show.
+        data.pop("avatar", None)
         data["active"] = bool(active)
         data["has_token"] = bool(self.token)
         return data

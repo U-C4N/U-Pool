@@ -106,6 +106,7 @@ class AccountFacts:
 
     email: str | None = None
     name: str | None = None
+    avatar: str | None = None
     plan: str | None = None
     plan_status: str | None = None
     usage_used: float | None = None
@@ -228,6 +229,7 @@ USAGE_SECTIONS = (
 
 EMAIL_KEYS = ("email", "emailAddress", "email_address")
 NAME_KEYS = ("name", "displayName", "display_name", "fullName", "full_name", "nickname")
+AVATAR_KEYS = ("picture", "pictureUrl", "picture_url", "avatar", "avatarUrl", "avatar_url")
 PLAN_KEYS = ("membershipType", "membership_type", "planName", "plan_name", "plan", "tier", "type")
 PLAN_STATUS_KEYS = ("subscriptionStatus", "subscription_status", "status", "state")
 
@@ -326,9 +328,20 @@ def _number_in(sections: list[dict[str, Any]], *names: str) -> tuple[float | Non
     return None, ""
 
 
-def _identity(payload: Any) -> tuple[str | None, str | None]:
+def _identity(payload: Any) -> tuple[str | None, str | None, str | None]:
+    """Email, display name and avatar URL - the three things Cursor caches.
+
+    The avatar is here rather than left out because Cursor keeps it in the same
+    ``cachedScopedProfile`` blob as the name, so a switch that wrote the name
+    without it would blank the picture in the account menu. Measured: the live
+    ``/api/auth/me`` returns the very URL the blob already held.
+    """
     sections = _sections(payload, *IDENTITY_SECTIONS)
-    return _text_in(sections, *EMAIL_KEYS), _text_in(sections, *NAME_KEYS)
+    return (
+        _text_in(sections, *EMAIL_KEYS),
+        _text_in(sections, *NAME_KEYS),
+        _text_in(sections, *AVATAR_KEYS),
+    )
 
 
 def _plan(payload: Any) -> tuple[str | None, str | None]:
@@ -455,7 +468,7 @@ def _refresh(account: CursorAccount, facts: AccountFacts, timeout: float) -> Non
     answers = [me, plan, summary]
 
     if me.ok:
-        facts.email, facts.name = _identity(me.data)
+        facts.email, facts.name, facts.avatar = _identity(me.data)
     if plan.ok:
         facts.plan, facts.plan_status = _plan(plan.data)
 

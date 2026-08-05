@@ -186,14 +186,20 @@ def _auth_values(account: CursorAccount) -> dict[str, str]:
 def _scoped_profile(account: CursorAccount) -> str:
     """The JSON blob the account menu draws its name and avatar from.
 
-    ``pictureUrl`` is omitted rather than written empty when it is unknown, which
-    it always is - a cookie carries no avatar and ``/api/auth/me`` was not asked
-    for one. An absent key leaves Cursor to fall back to initials; an empty string
-    is a URL it would try to load and fail.
+    Written in the same key order and with the same separators the measured blob
+    used, so switching to the account already signed in round-trips byte for byte
+    rather than leaving a diff that is only formatting.
+
+    ``pictureUrl`` is omitted rather than written empty when it is not known. An
+    absent key leaves Cursor to fall back to initials; an empty string is a URL it
+    would try to load and fail.
     """
     if not account.name:
         return ""
-    return json.dumps({"displayName": account.name}, separators=(",", ":"))
+    profile = {"displayName": account.name}
+    if account.avatar:
+        profile["pictureUrl"] = account.avatar
+    return json.dumps(profile, separators=(",", ":"))
 
 
 def _auth_id(account: CursorAccount) -> str:

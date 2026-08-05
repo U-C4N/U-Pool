@@ -465,6 +465,35 @@ def test_the_live_stripe_shape_gives_the_plan_and_its_status(net):
     assert (facts.plan, facts.plan_status) == ("free", "unpaid")
 
 
+LIVE_ME = {
+    "email": "umut@example.com",
+    "email_verified": True,
+    "name": "Umut Jan",
+    "sub": "user_01JAXG",
+    "created_at": "2024-10-23T20:16:56.465Z",
+    "updated_at": "2026-08-05T20:58:05.887Z",
+    "picture": "https://workoscdn.com/images/v1/PxPBcY71MEdD",
+    "id": 109596761,
+}
+
+
+def test_the_avatar_comes_back_from_the_identity_call(net):
+    """``picture`` is the URL Cursor already had in ``cachedScopedProfile``.
+
+    Without it a switch writes the display name and drops the account menu's
+    picture - which the first live round-trip did, and is why this is read at all.
+    """
+    net.routes.update(me=LIVE_ME)
+    facts = api.fetch(account())
+    assert facts.avatar == "https://workoscdn.com/images/v1/PxPBcY71MEdD"
+    assert (facts.email, facts.name) == ("umut@example.com", "Umut Jan")
+
+
+def test_an_identity_call_with_no_picture_reports_no_avatar(net):
+    net.routes.update(me={"email": "a@example.com", "name": "A", "picture": None})
+    assert api.fetch(account()).avatar is None
+
+
 # ------------------------------------------------------------ identity + plan
 
 

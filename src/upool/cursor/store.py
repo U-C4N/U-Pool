@@ -37,6 +37,7 @@ CONFIG_VERSION = 1
 FACT_FIELDS = (
     "email",
     "name",
+    "avatar",
     "plan",
     "plan_status",
     "usage_used",

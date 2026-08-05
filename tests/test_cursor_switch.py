@@ -256,6 +256,36 @@ def test_a_token_that_is_not_a_jwt_falls_back_to_the_cookie_user_id():
     assert switch._auth_values(account)["glass.lastSignedInAuthId"] == "auth0|user_08HH"
 
 
+def test_a_known_avatar_goes_into_the_profile_blob():
+    """Cursor keeps the picture in the same blob as the name.
+
+    Measured: writing the name alone round-tripped every other key byte for byte
+    and blanked the account menu's picture. Both or neither.
+    """
+    account = CursorAccount(
+        user_id="user_01AB", token="eyJ", name="Umut Jan", avatar="https://cdn/pic"
+    )
+    profile = switch._auth_values(account)["cursorAuth/cachedScopedProfile"]
+
+    assert profile == '{"displayName":"Umut Jan","pictureUrl":"https://cdn/pic"}'
+
+
+def test_an_unknown_avatar_leaves_the_key_out_rather_than_empty():
+    """An absent key falls back to initials; an empty string is a URL Cursor loads."""
+    account = CursorAccount(user_id="user_01AB", token="eyJ", name="Umut Jan")
+    profile = switch._auth_values(account)["cursorAuth/cachedScopedProfile"]
+
+    assert profile == '{"displayName":"Umut Jan"}'
+
+
+def test_the_avatar_never_reaches_the_ui(pool):
+    """It is stored to be written back into Cursor, not to be rendered here."""
+    account = CursorAccount(user_id="user_01AB", token="eyJ", avatar="https://cdn/pic")
+
+    assert "avatar" not in account.summary(active=False)
+    assert account.to_dict()["avatar"] == "https://cdn/pic"
+
+
 def test_the_two_token_keys_hold_the_same_credential(pool):
     """The snapshot found one 413-character JWT in both, and a cookie carries one
     token - there is no second credential to put in the second key."""
