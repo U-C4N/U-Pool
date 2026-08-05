@@ -205,3 +205,21 @@ export const RefreshIcon = (p: IconProps) => (
     <path d="M20.25 4v4.25H16" />
   </Svg>
 );
+
+/** Row menu — filled like `GripIcon`, since three hairline circles vanish at 16px. */
+export const EllipsisIcon = (p: IconProps) => (
+  <Svg {...p} strokeWidth={0} fill="currentColor">
+    <circle cx="5.75" cy="12" r="1.45" />
+    <circle cx="12" cy="12" r="1.45" />
+    <circle cx="18.25" cy="12" r="1.45" />
+  </Svg>
+);
+
+/** Choose a file — a page with a folded corner. */
+export const FileIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M13.4 3.5H7.2A1.7 1.7 0 0 0 5.5 5.2v13.6a1.7 1.7 0 0 0 1.7 1.7h9.6a1.7 1.7 0 0 0 1.7-1.7V8.6Z" />
+    <path d="M13.4 3.5v5.1h5.1" />
+    <path d="M8.75 13h6.5M8.75 16.25h4.25" />
+  </Svg>
+);

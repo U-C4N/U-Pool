@@ -54,19 +54,26 @@ def _prepare(home: Path) -> None:
 
     winenv.ENV_KEY = SCRATCH_ENV_KEY
 
-    # Hermes and OpenCode do not live under the home directory, so the redirect
-    # above is not enough on its own. ``paths.sandboxed`` is what makes their
-    # helpers ignore %LOCALAPPDATA%, HERMES_HOME and OPENCODE_CONFIG; this checks
-    # it actually did, because getting it wrong writes to the developer's live
-    # Hermes config rather than to a temp directory.
+    # Hermes, OpenCode and Cursor do not live under the home directory, so the
+    # redirect above is not enough on its own. ``paths.sandboxed`` is what makes
+    # their helpers ignore %LOCALAPPDATA%, HERMES_HOME, OPENCODE_CONFIG and
+    # %APPDATA%; this checks it actually did, because getting it wrong writes to
+    # the developer's live Hermes config - or worse, to the state.vscdb their
+    # running editor is holding open - rather than to a temp directory.
     for resolved in (
         paths.claude_settings_file(),
         paths.codex_config_file(),
         paths.hermes_config_file(),
         paths.opencode_config_file(),
+        paths.cursor_state_db(),
     ):
         if not str(resolved).startswith(str(home)):
             raise SystemExit(f"[sandbox] {resolved} escaped the sandbox - refusing to run")
+
+    # After the check, never before: this is the one directory the sandbox creates
+    # whose real counterpart already exists, so a mkdir on an unredirected path
+    # would succeed silently instead of tripping the guard above.
+    paths.cursor_state_db().parent.mkdir(parents=True, exist_ok=True)
 
 
 def main(argv: list[str]) -> int:

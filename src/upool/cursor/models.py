@@ -1,0 +1,178 @@
+"""One record per Cursor account in the pool.
+
+``user_id`` is identity here, not ``email``. It is the half of the session cookie
+before ``::``, it is known the moment a cookie is pasted, and it is what makes a
+re-paste of a rotated cookie refresh the row that is already there instead of
+adding a second one. An email is not known until ``/api/auth/me`` answers, and on
+an expired token it never answers at all.
+
+There is deliberately no ``period_end``. ``/api/auth/stripe`` returns one and the
+card does not show it - a field stored for a display that was considered and
+declined is a field that goes stale without anyone noticing.
+
+Every usage figure is optional because it comes from undocumented endpoints that
+will change without notice. A missing value renders as an em dash; it must never
+be the reason a switch cannot happen, since the token is what switching needs and
+the token comes from none of those calls.
+"""
+
+from __future__ import annotations
+
+import uuid
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
+from ..models import UPoolError, mask_secret, now_ms
+
+# What the last refresh concluded about the token. ``unknown`` is the honest
+# answer before the first call and after a network failure - a Cursor outage must
+# not mark a working account dead.
+STATUS_OK = "ok"
+STATUS_EXPIRED = "expired"
+STATUS_UNKNOWN = "unknown"
+STATUSES = (STATUS_OK, STATUS_EXPIRED, STATUS_UNKNOWN)
+
+# Cursor meters a plan either in dollars or in requests, and the two endpoints
+# that report them are different. The unit travels with the numbers so the bar
+# can label itself without guessing from the magnitude.
+UNIT_USD = "usd"
+UNIT_REQUESTS = "requests"
+UNITS = (UNIT_USD, UNIT_REQUESTS, "")
+
+COOKIE_NAME = "WorkosCursorSessionToken"
+# cursor.com still accepts the two NextAuth spellings, and a ``cookies.txt``
+# exported from a browser carries whichever one that session was issued, so
+# recognising all three is the parser's job rather than the user's.
+COOKIE_NAMES = (COOKIE_NAME, "__Secure-next-auth.session-token", "next-auth.session-token")
+
+# ``::`` percent-encoded. The dashboard sends it encoded, and an undocumented
+# endpoint is not the place to find out whether the raw form is also accepted.
+COOKIE_SEPARATOR = "%3A%3A"
+
+_TEXT_FIELDS = (
+    "id",
+    "user_id",
+    "email",
+    "name",
+    "token",
+    "plan",
+    "plan_status",
+    "usage_unit",
+    "status",
+)
+_OPTIONAL_NUMBERS = ("usage_used", "usage_limit", "usage_percent")
+_COUNTERS = ("last_checked", "added_at")
+
+
+@dataclass
+class CursorAccount:
+    id: str = field(default_factory=lambda: uuid.uuid4().hex)
+
+    # The two halves of the cookie. ``user_id`` identifies the row; ``token`` is
+    # the whole credential, so it never leaves this process in a list response.
+    user_id: str = ""
+    token: str = ""
+
+    # Filled by /api/auth/me, absent until it answers.
+    email: str = ""
+    name: str = ""
+
+    # Filled by /api/auth/stripe.
+    plan: str = ""
+    plan_status: str = ""
+
+    # Filled by /api/usage-summary, or /api/usage for a request-quota plan.
+    usage_used: float | None = None
+    usage_limit: float | None = None
+    usage_unit: str = ""
+    usage_percent: float | None = None
+
+    status: str = STATUS_UNKNOWN
+    last_checked: int = 0
+    added_at: int = field(default_factory=now_ms)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def redacted(self) -> dict[str, Any]:
+        """Same record with the cookie masked, for logs and error messages."""
+        data = self.to_dict()
+        data["token"] = mask_secret(self.token)
+        return data
+
+    def summary(self, active: bool) -> dict[str, Any]:
+        """What the UI is allowed to see: the record without its credential.
+
+        ``api.py``'s module docstring already rules that no secret goes into a
+        list response, and this one is stronger than a provider key - a session
+        cookie is the whole account, not one endpoint's access to it. The UI only
+        ever needs to know whether a token is there, which is ``has_token``.
+        """
+        data = self.to_dict()
+        data.pop("token", None)
+        data["active"] = bool(active)
+        data["has_token"] = bool(self.token)
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CursorAccount":
+        """Rebuild a record from ``cursor.json``, tolerating whatever is in it.
+
+        The file is plain JSON the user can open and edit, and half of it is
+        filled in by endpoints that are expected to change shape. So a value that
+        will not convert falls back to the default rather than raising: one
+        malformed row must not cost the whole pool.
+        """
+        known = set(cls.__dataclass_fields__)
+        clean = {k: v for k, v in data.items() if k in known}
+        clean.setdefault("id", uuid.uuid4().hex)
+        for key in _TEXT_FIELDS:
+            if key in clean:
+                clean[key] = "" if clean[key] is None else str(clean[key])
+        for key in _OPTIONAL_NUMBERS:
+            if key in clean:
+                clean[key] = as_optional_float(clean[key])
+        for key in _COUNTERS:
+            if key in clean:
+                clean[key] = as_counter(clean[key])
+        if clean.get("status") not in STATUSES:
+            clean["status"] = STATUS_UNKNOWN
+        if clean.get("usage_unit") not in UNITS:
+            clean["usage_unit"] = ""
+        return cls(**clean)
+
+
+def as_optional_float(value: Any) -> float | None:
+    """A usage figure, or ``None`` for anything that is not one.
+
+    ``None`` is a real value here - "not measured yet" - so an unparseable entry
+    collapses onto it rather than onto zero, which would read as a fresh quota.
+    A bool is rejected for the same reason: ``float(True)`` is 1.0, and a card
+    showing 1.0 of a limit nobody set is worse than a card showing nothing.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def as_counter(value: Any) -> int:
+    """A millisecond timestamp. Zero means never, which is the safe default."""
+    number = as_optional_float(value)
+    return int(number) if number is not None else 0
+
+
+def cookie_header(account: CursorAccount) -> str:
+    """The ``Cookie:`` value for a request made as ``account``.
+
+    One spelling of the header, in one place: the encoding of the separator and
+    the choice of cookie name are the two things a request gets wrong silently,
+    and cursor.com answers a malformed cookie with the same 401 it answers a dead
+    one with. A missing token raises instead, because that 401 would be recorded
+    as ``expired`` and quietly bury a record that was never signed in.
+    """
+    if not account.user_id or not account.token:
+        raise UPoolError("This account has no session cookie stored - paste it again.")
+    return f"{COOKIE_NAME}={account.user_id}{COOKIE_SEPARATOR}{account.token}"

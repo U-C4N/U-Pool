@@ -13,6 +13,10 @@ import type {
   AppState,
   Bootstrap,
   CliVersions,
+  CursorAccountSummary,
+  CursorAddResult,
+  CursorState,
+  CursorUseResult,
   EnvInfo,
   HealthResult,
   ProviderDetail,
@@ -193,7 +197,7 @@ const mockUpdate: UpdateStatus = {
   verified: "",
   skipped_version: "",
   last_check: Math.floor(Date.now() / 1000),
-  current_version: "0.7.0-mock",
+  current_version: "0.8.0-mock",
   installed_from: "",
   install_failed: "",
   busy: false,
@@ -303,6 +307,235 @@ function emptySummary(app: string): SessionSummary {
   };
 }
 
+const CURSOR_DB_PATH = "%APPDATA%/Cursor/User/globalStorage/state.vscdb";
+
+/** The stored record: a summary plus the credential the UI never receives. */
+type CursorRecord = Omit<CursorAccountSummary, "active" | "has_token"> & { token: string };
+
+const agoMinutes = (count: number) => Date.now() - count * 60_000;
+
+/**
+ * One account per card state the list has to render: a Pro account in use and
+ * mid-quota, a Free account almost out of requests, and an expired one - which
+ * keeps its email and name, because a fresh cookie has to revive that row rather
+ * than add a second one beside it.
+ */
+const mockCursor: { current: string; busy: boolean; running: boolean; accounts: CursorRecord[] } = {
+  current: "cursor-pro",
+  busy: false,
+  running: false,
+  accounts: [
+    {
+      id: "cursor-pro",
+      user_id: "user_01HZPRO",
+      email: "umut@example.com",
+      name: "Umut Can",
+      token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mock-pro",
+      plan: "Pro",
+      plan_status: "active",
+      usage_used: 12.4,
+      usage_limit: 20,
+      usage_unit: "usd",
+      usage_percent: 62,
+      status: "ok",
+      last_checked: agoMinutes(4),
+      added_at: agoMinutes(60 * 24 * 30),
+    },
+    {
+      id: "cursor-free",
+      user_id: "user_01HZFREE",
+      email: "spare@example.com",
+      name: "Spare account",
+      token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mock-free",
+      plan: "Free",
+      plan_status: "active",
+      usage_used: 481,
+      usage_limit: 500,
+      usage_unit: "requests",
+      usage_percent: 96.2,
+      status: "ok",
+      last_checked: agoMinutes(11),
+      added_at: agoMinutes(60 * 24 * 9),
+    },
+    {
+      // Refreshed after the cookie died, so the plan is whatever it was last
+      // known to be and every usage figure is back to "not measured".
+      id: "cursor-expired",
+      user_id: "user_01HZOLD",
+      email: "old@example.com",
+      name: "Old work account",
+      token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mock-expired",
+      plan: "Pro",
+      plan_status: "",
+      usage_used: null,
+      usage_limit: null,
+      usage_unit: "",
+      usage_percent: null,
+      status: "expired",
+      last_checked: agoMinutes(60 * 26),
+      added_at: agoMinutes(60 * 24 * 120),
+    },
+  ],
+};
+
+const CURSOR_COOKIE_NAMES = [
+  "WorkosCursorSessionToken",
+  "__Secure-next-auth.session-token",
+  "next-auth.session-token",
+];
+
+type CursorCandidate = { user_id: string; token: string; email: string; name: string };
+
+/**
+ * `user_01AB%3A%3AeyJ…` into its two halves, or null for anything else.
+ *
+ * A value with no separator is rejected rather than stored under a made-up id:
+ * `user_id` is what makes a re-paste refresh a row instead of duplicating it,
+ * and the real parser will not invent one either.
+ */
+function splitCursorCookie(raw: string): { user_id: string; token: string } | null {
+  const value = raw.trim().replace(/%3A%3A/gi, "::");
+  const cut = value.indexOf("::");
+  if (cut <= 0 || cut >= value.length - 2) return null;
+  return { user_id: value.slice(0, cut), token: value.slice(cut + 2) };
+}
+
+/** The line forms from section 2 of the design, first match wins. */
+function cursorFromLine(line: string): CursorCandidate | null {
+  const blank = { email: "", name: "" };
+
+  const fields = line.split("\t");
+  if (fields.length >= 7 && CURSOR_COOKIE_NAMES.includes(fields[5].trim())) {
+    const cookie = splitCursorCookie(fields[6]);
+    return cookie ? { ...cookie, ...blank } : null;
+  }
+
+  const named = /^([A-Za-z0-9_.-]+)=(.+)$/.exec(line);
+  if (named) {
+    if (!CURSOR_COOKIE_NAMES.includes(named[1])) return null;
+    const cookie = splitCursorCookie(named[2]);
+    return cookie ? { ...cookie, ...blank } : null;
+  }
+
+  if (line.includes(",")) {
+    const [head, ...rest] = line.split(",");
+    const cookie = splitCursorCookie(rest.join(","));
+    return cookie ? { ...cookie, ...blank, email: head.includes("@") ? head.trim() : "" } : null;
+  }
+
+  const bare = splitCursorCookie(line);
+  return bare ? { ...bare, ...blank } : null;
+}
+
+function cursorFromJson(text: string): { found: CursorCandidate[]; skipped: number } | null {
+  if (!text.startsWith("{") && !text.startsWith("[")) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const rows = Array.isArray(parsed) ? parsed : [parsed];
+  const found: CursorCandidate[] = [];
+  let skipped = 0;
+  for (const row of rows) {
+    const entry = (row ?? {}) as Record<string, unknown>;
+    const raw = [entry.token, entry.accessToken, entry.cookie].find(
+      (value) => typeof value === "string" && value.length > 0,
+    );
+    const cookie = typeof raw === "string" ? splitCursorCookie(raw) : null;
+    if (!cookie) {
+      skipped += 1;
+      continue;
+    }
+    found.push({
+      ...cookie,
+      email: typeof entry.email === "string" ? entry.email : "",
+      name: typeof entry.name === "string" ? entry.name : "",
+    });
+  }
+  return { found, skipped };
+}
+
+/**
+ * A line that matches nothing is skipped silently and only counted. A
+ * `cookies.txt` carries comment lines and every other domain's cookies, so the
+ * count is the whole report.
+ */
+function parseCursorPaste(text: string): { found: CursorCandidate[]; skipped: number } {
+  const whole = cursorFromJson(text.trim());
+  if (whole) return whole;
+  const found: CursorCandidate[] = [];
+  let skipped = 0;
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const candidate = cursorFromLine(trimmed);
+    if (candidate) found.push(candidate);
+    else skipped += 1;
+  }
+  return { found, skipped };
+}
+
+const cursorPercent = (account: CursorRecord): number | null =>
+  account.usage_used === null || !account.usage_limit
+    ? null
+    : Number(((account.usage_used / account.usage_limit) * 100).toFixed(1));
+
+/**
+ * What a first refresh learns about a freshly pasted cookie.
+ *
+ * The real refresh reads an email and a name from /api/auth/me, a plan from
+ * /api/auth/stripe and a figure from /api/usage-summary, so an imported row
+ * stops being a bare `user_id` the moment the import's own refresh lands.
+ * Without this the preview left every added account as a nameless card showing
+ * two em dashes for good - which is exactly the state that flow exists to
+ * resolve, and so the one thing the mock most needs to reproduce.
+ *
+ * Derived from `user_id` rather than drawn at random, so re-pasting the same
+ * cookie identifies the same way twice.
+ */
+function identifyCursorAccount(account: CursorRecord): void {
+  const slug = account.user_id.replace(/^user_/i, "") || "account";
+  if (!account.email) account.email = `${slug.toLowerCase()}@example.com`;
+  if (!account.name) account.name = `Account ${slug}`;
+  // Alternates on the id so an imported cookie can land on either meter the card
+  // knows how to draw, rather than only ever the dollar one.
+  const byRequest = slug.charCodeAt(0) % 2 === 1;
+  account.plan = byRequest ? "Free" : "Pro";
+  account.plan_status = "active";
+  account.usage_unit = byRequest ? "requests" : "usd";
+  account.usage_used = byRequest ? 37 : 1.8;
+  account.usage_limit = byRequest ? 500 : 20;
+  account.usage_percent = cursorPercent(account);
+}
+
+/** Every later refresh only moves the meter on, which is what makes a poll visible. */
+function advanceCursorUsage(account: CursorRecord): void {
+  if (account.usage_used === null || !account.usage_limit) return;
+  const step = account.usage_unit === "requests" ? 7 : 0.35;
+  account.usage_used = Math.min(
+    account.usage_limit,
+    Number((account.usage_used + step).toFixed(2)),
+  );
+  account.usage_percent = cursorPercent(account);
+}
+
+function cursorState(): CursorState {
+  return {
+    accounts: mockCursor.accounts.map(({ token, ...rest }) => ({
+      ...rest,
+      active: rest.id === mockCursor.current,
+      has_token: Boolean(token),
+    })),
+    current: mockCursor.current,
+    busy: mockCursor.busy,
+    running: mockCursor.running,
+    supported: true,
+    db_path: CURSOR_DB_PATH,
+  };
+}
+
 function state(app: AppId): AppState {
   const slot = db[app];
   return {
@@ -325,7 +558,7 @@ const find = (app: AppId, id: string) => db[app].providers.find((p) => p.id === 
 export const mockApi = {
   bootstrap: () =>
     ok<Bootstrap>({
-      version: "0.7.0-mock",
+      version: "0.8.0-mock",
       platform: "browser",
       apps: [
         { id: "claude", label: "Claude Code" },
@@ -497,6 +730,102 @@ export const mockApi = {
       freed,
       errors: [],
       summary: mockSessions[app],
+    });
+  },
+  cursor_state: () => ok<CursorState>(cursorState()),
+  cursor_add: (text: string) => {
+    const { found, skipped } = parseCursorPaste(text ?? "");
+    let added = 0;
+    let refreshed = 0;
+    for (const candidate of found) {
+      const existing = mockCursor.accounts.find((row) => row.user_id === candidate.user_id);
+      if (existing) {
+        // A duplicate user_id refreshes the token and leaves the rest of the row
+        // alone, so a rotated cookie keeps its position, name and last usage.
+        // The status goes back to unknown because nothing has tried the new one yet.
+        existing.token = candidate.token;
+        existing.status = "unknown";
+        refreshed += 1;
+        continue;
+      }
+      mockCursor.accounts.push({
+        id: `cursor-${Date.now()}-${added}`,
+        user_id: candidate.user_id,
+        email: candidate.email,
+        name: candidate.name,
+        token: candidate.token,
+        plan: "",
+        plan_status: "",
+        usage_used: null,
+        usage_limit: null,
+        usage_unit: "",
+        usage_percent: null,
+        status: "unknown",
+        last_checked: 0,
+        added_at: Date.now(),
+      });
+      added += 1;
+    }
+    return ok<CursorAddResult>({ added, refreshed, skipped, state: cursorState() });
+  },
+  cursor_delete: (id: string) => {
+    mockCursor.accounts = mockCursor.accounts.filter((row) => row.id !== id);
+    if (mockCursor.current === id) mockCursor.current = "";
+    return ok<CursorState>(cursorState());
+  },
+  cursor_reorder: (ids: string[]) => {
+    mockCursor.accounts = ids
+      .map((id) => mockCursor.accounts.find((row) => row.id === id))
+      .filter((row): row is CursorRecord => Boolean(row));
+    return ok<CursorState>(cursorState());
+  },
+  cursor_refresh: (id = "") => {
+    const targets = id
+      ? mockCursor.accounts.filter((row) => row.id === id)
+      : [...mockCursor.accounts];
+    if (id && targets.length === 0) return fail("That account is no longer in the pool.");
+    // Already working: the real endpoint would not start a second pass either.
+    if (mockCursor.busy) return ok<CursorState>(cursorState());
+    mockCursor.busy = true;
+    // The real call hands back the cache at once and answers on a thread pool,
+    // so this one has to stay busy long enough for the UI's polling loop to run
+    // at least once - otherwise the preview never exercises that path.
+    setTimeout(() => {
+      for (const account of targets) {
+        const first = account.last_checked === 0;
+        account.last_checked = Date.now();
+        // A dead cookie learns nothing: the real refresh is refused by every
+        // endpoint and leaves the stored figures exactly where they were.
+        if (account.status === "expired") continue;
+        if (first) identifyCursorAccount(account);
+        else advanceCursorUsage(account);
+        // One endpoint answering is what proves a cookie works, so anything that
+        // reaches here is "ok" - including a row a re-paste just rotated the
+        // token on and set back to "unknown".
+        account.status = "ok";
+      }
+      mockCursor.busy = false;
+    }, 800);
+    return ok<CursorState>(cursorState());
+  },
+  cursor_use: (id: string) => {
+    const account = mockCursor.accounts.find((row) => row.id === id);
+    if (!account) return fail("That account is no longer in the pool.");
+    if (!account.token) return fail("This account has no session cookie stored - paste it again.");
+    if (account.status === "expired") {
+      return fail("This account's session has expired. Paste a fresh cookie for it first.");
+    }
+    const wasRunning = mockCursor.running;
+    mockCursor.current = id;
+    // The switch always ends with Cursor open, whether it had to close it or not.
+    mockCursor.running = true;
+    return ok<CursorUseResult>({
+      state: cursorState(),
+      files: [CURSOR_DB_PATH],
+      backups: [`${CURSOR_DB_PATH}.backup`],
+      warnings: [],
+      closed_cursor: wasRunning,
+      relaunched: true,
     });
   },
   quit: () => ok(true),

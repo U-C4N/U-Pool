@@ -5,6 +5,7 @@ import sys
 import pytest
 
 from upool import atomicio, autostart, clis, paths, winenv
+from upool.cursor import process as cursorproc
 from upool.store import Store
 
 # The real value lives under HKCU\...\CurrentVersion\Run. Tests get their own
@@ -50,6 +51,14 @@ def sandbox(tmp_path, monkeypatch):
     that shells out to the tools it is testing around is not hermetic even when it
     is fast. ``tests/test_clis.py`` patches this back out for the handful of cases
     that are about the probe itself.
+
+    The Cursor process module is stubbed for a blunter reason: a switch closes the
+    editor before it writes, and ``close()`` unstubbed sends a real ``taskkill``
+    to the developer's own Cursor. It would take whatever they had unsaved with
+    it, mid-suite, from a test that was only checking a return value. ``running``
+    answers no and ``launch`` does nothing so the switch tests exercise the
+    already-closed branch by default; the ones about the close itself patch these
+    back with their own fakes.
     """
     fake_home = tmp_path / "home"
     fake_home.mkdir()
@@ -65,6 +74,9 @@ def sandbox(tmp_path, monkeypatch):
     monkeypatch.setattr(winenv, "ENV_KEY", TEST_ENV_KEY)
     clis.clear_cache()
     monkeypatch.setattr(clis, "resolve", lambda name: "")
+    monkeypatch.setattr(cursorproc, "running", lambda: False)
+    monkeypatch.setattr(cursorproc, "close", lambda timeout=0: True)
+    monkeypatch.setattr(cursorproc, "launch", lambda: False)
     _drop_test_registry_keys()
     _assert_sandboxed(fake_home)
     yield fake_home
@@ -89,6 +101,12 @@ def _assert_sandboxed(fake_home) -> None:
         paths.codex_config_file(),
         paths.hermes_config_file(),
         paths.opencode_config_file(),
+        # The one target here that is not a config file: a 1.4 MB database holding
+        # the user's Cursor conversations and their live MCP OAuth secrets, which
+        # a switch writes the ``cursorAuth/*`` keys into. It resolves through
+        # %APPDATA%, so the fake home is the only thing standing between the suite
+        # and the editor the developer has open.
+        paths.cursor_state_db(),
         paths.config_file(),
     ):
         assert str(resolved).startswith(str(fake_home.parent)), (

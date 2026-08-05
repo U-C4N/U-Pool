@@ -8,6 +8,9 @@ import type {
   AppState,
   Bootstrap,
   CliVersions,
+  CursorAddResult,
+  CursorState,
+  CursorUseResult,
   EnvInfo,
   HealthResult,
   ProviderDetail,
@@ -111,5 +114,14 @@ export const backend = {
   refreshCliVersions: () => call<CliVersions>("refresh_cli_versions"),
   sessionSummary: (app: AppId) => call<SessionSummary>("session_summary", app),
   deleteSessions: (app: AppId) => call<SessionPurge>("delete_sessions", app),
+  cursorState: () => call<CursorState>("cursor_state"),
+  cursorAdd: (text: string) => call<CursorAddResult>("cursor_add", text),
+  cursorDelete: (id: string) => call<CursorState>("cursor_delete", id),
+  cursorReorder: (ids: string[]) => call<CursorState>("cursor_reorder", ids),
+  // An empty id refreshes every account. The call returns the cache at once and
+  // works on a background thread, so the answer arrives by polling `cursorState`
+  // while `busy` - the same arrangement `cliVersions` uses.
+  cursorRefresh: (id = "") => call<CursorState>("cursor_refresh", id),
+  cursorUse: (id: string) => call<CursorUseResult>("cursor_use", id),
   quit: () => call<boolean>("quit"),
 };

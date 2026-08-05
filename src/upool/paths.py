@@ -15,6 +15,7 @@ CONFIG_FILE_NAME = "config.json"
 SETTINGS_FILE_NAME = "settings.json"
 ENV_OWNED_FILE_NAME = "env-owned.json"
 CODEX_LOGIN_FILE_NAME = "codex-login.json"
+CURSOR_ACCOUNTS_FILE_NAME = "cursor.json"
 BACKUP_DIR_NAME = "backups"
 UPDATE_DIR_NAME = "update"
 
@@ -175,6 +176,62 @@ def opencode_config_file() -> Path:
     if override and not sandboxed():
         return Path(override)
     return opencode_dir() / "opencode.json"
+
+
+def cursor_app_dir() -> Path:
+    """Where the Cursor editor keeps its own state.
+
+    Windows resolves this through ``%APPDATA%``, which is what makes the sandbox
+    check load-bearing rather than decorative. The directory underneath holds
+    ``state.vscdb`` - the user's entire Cursor history, their composer state and
+    their live MCP OAuth secrets - and U-Pool writes into that file. A test or a
+    one-off probe that reached the real one would be editing a database the
+    running editor owns, so a fake home wins over the platform location outright,
+    the same way it does for Hermes and OpenCode - see :func:`sandboxed`.
+    """
+    if sandboxed():
+        return home() / ".cursor-app"
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            return Path(appdata) / "Cursor"
+        return home() / "AppData" / "Roaming" / "Cursor"
+    if sys.platform == "darwin":
+        return home() / "Library" / "Application Support" / "Cursor"
+    return home() / ".config" / "Cursor"
+
+
+def cursor_state_db() -> Path:
+    """Cursor's SQLite state, holding the ``cursorAuth/*`` keys a switch rewrites.
+
+    Cursor keeps this open while it runs. That is why a switch closes the editor
+    first rather than writing around the lock: the ``-wal`` and ``-shm`` files
+    beside it are only in a settled state once the process is gone.
+    """
+    return cursor_app_dir() / "User" / "globalStorage" / "state.vscdb"
+
+
+def cursor_storage_json() -> Path:
+    """Cursor's telemetry ids - resolved so a switch can prove it left them alone.
+
+    U-Pool does not write this file. Resetting ``telemetry.machineId`` is what
+    the reference implementation does to defeat a per-device limit; it is not
+    part of changing accounts, and those values are Cursor's own state rather
+    than anything U-Pool put there.
+    """
+    return cursor_app_dir() / "User" / "globalStorage" / "storage.json"
+
+
+def cursor_accounts_file() -> Path:
+    """The Cursor account pool, in its own file rather than a section of config.json.
+
+    ``Store._normalise`` rebuilds its document from ``_empty()`` and copies only
+    ``apps``, so an extra top-level section there would be dropped silently on
+    the next save - and a Cursor account has no ``Provider`` to normalise through
+    anyway. This follows ``env-owned.json`` and ``codex-login.json``: U-Pool
+    state that is not a provider record gets its own file.
+    """
+    return app_home() / CURSOR_ACCOUNTS_FILE_NAME
 
 
 def bundle_root() -> Path:

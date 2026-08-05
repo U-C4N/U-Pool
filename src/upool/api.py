@@ -8,6 +8,11 @@ provider through :meth:`get_provider` when it actually needs the value. The
 environment reads follow the same rule - :meth:`environment` masks what it finds
 in the registry, because the panel has to show that a variable is set, not what
 it holds.
+
+The Cursor endpoints hold the same rule harder still, and with no exception: a
+session cookie is the whole account rather than one endpoint's access to it, so
+there is no ``get_account`` counterpart to :meth:`get_provider` and no form that
+asks for the value back. The UI gets ``has_token`` and nothing else.
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ import functools
 import os
 import subprocess
 import sys
+import threading
 import traceback
 from pathlib import Path
 from typing import Any, Callable
@@ -32,6 +38,13 @@ from . import (
     updater,
     winenv,
 )
+from .cursor import api as cursorapi
+from .cursor import parse as cursorparse
+from .cursor import process as cursorproc
+from .cursor import switch as cursorswitch
+from .cursor import vscdb as cursorvscdb
+from .cursor.models import CursorAccount
+from .cursor.store import CursorStore
 from .models import Provider, UPoolError, as_bool, mask_secret
 from .store import Store
 
@@ -42,6 +55,11 @@ APP_VERSION = __version__
 # command with an argument rather than a document, so it goes through Popen -
 # os.startfile would try to open a file called ``rundll32.exe ...``.
 ENV_SETTINGS_COMMAND = ("rundll32.exe", "sysdm.cpl,EditEnvironmentVariables")
+
+# What the account already signed in to Cursor is called when it is adopted into
+# the pool. It is a placeholder rather than a guess: nothing knows whose account
+# it is until ``/api/auth/me`` answers, and the first refresh replaces it.
+LIVE_SESSION_NAME = "Current session"
 
 
 def endpoint(func: Callable) -> Callable:
@@ -74,6 +92,13 @@ class Api:
         self.store = store or Store()
         self._window = None
         self._updater = updater.Updater()
+        # One pool for the life of the app. The switch is handed this instance
+        # rather than building its own, so the ``current`` it records is the one
+        # the next ``cursor_state`` reads.
+        self._cursor = CursorStore()
+        self._cursor_lock = threading.Lock()
+        self._cursor_worker: threading.Thread | None = None
+        self._adopt_live_session()
 
     def attach(self, window) -> None:
         self._window = window
@@ -89,6 +114,12 @@ class Api:
         # polls while busy is true - so the header would sit on placeholders until
         # someone pressed refresh. Spawning a thread costs nothing here.
         cli_state = clis.refresh_async(force=False)
+        # The Cursor pool for the same reason one line further on: every card is
+        # a plan, a usage bar and an email that only cursor.com knows, and a
+        # snapshot taken before the refresh starts reports busy=false on a
+        # refresh that is about to begin - so the cards would sit on their last
+        # known figures until someone pressed Refresh all.
+        cursor_state = self._start_cursor_refresh()
         payload = {
             "version": APP_VERSION,
             "platform": sys.platform,
@@ -97,6 +128,7 @@ class Api:
             "settings": self._settings(),
             "update": self._updater.snapshot(),
             "clis": cli_state,
+            "cursor": cursor_state,
         }
         # Last, and only a thread spawn: first paint must not wait on the network,
         # and a dead one must not delay it either.
@@ -249,6 +281,231 @@ class Api:
         """
         outcome = sessions.purge(app)
         return outcome | {"summary": sessions.summary(app)}
+
+    # ----------------------------------------------------------------- cursor
+    #
+    # The sixth tab, and the only one that is not a provider app. Every endpoint
+    # here answers with the whole :meth:`_cursor_state` for the same reason the
+    # provider endpoints answer with ``_app_state``: the UI renders what was
+    # stored rather than what it asked for, so a paste that was deduplicated or
+    # a switch that only half applied shows as what actually happened.
+
+    def _cursor_state(self) -> dict[str, Any]:
+        """The whole Cursor tab in one object - the sibling of :meth:`_app_state`.
+
+        ``running`` is a live probe rather than a remembered flag. The user can
+        close Cursor between opening the tab and pressing Use, and the modal that
+        warns them their editor is about to be closed has to be right at the
+        moment it is shown, not at the moment the tab was opened.
+
+        ``supported`` is whether there is a Cursor database on this machine at
+        all, which is the fact a switch actually depends on - a platform check
+        would say yes on a Windows box where Cursor has never been installed.
+        Accounts can still be pasted and refreshed without one; only ``Use``
+        needs it.
+        """
+        current = self._cursor.current_id()
+        return {
+            "accounts": [
+                account.summary(account.id == current) for account in self._cursor.list_accounts()
+            ],
+            "current": current,
+            "busy": self._cursor_busy(),
+            "running": cursorproc.running(),
+            "supported": cursorvscdb.exists(),
+            "db_path": str(paths.cursor_state_db()),
+        }
+
+    @endpoint
+    def cursor_state(self) -> dict[str, Any]:
+        """Current knowledge, without waiting for anything. Polled while ``busy``."""
+        return self._cursor_state()
+
+    @endpoint
+    def cursor_add(self, text: str) -> dict[str, Any]:
+        """Read every account out of one paste - a line, a file, or two hundred rows.
+
+        Nothing here reaches the network. The counts are what the toast says,
+        and the UI follows with :meth:`cursor_refresh` to fill the new cards in -
+        which keeps every request to cursor.com behind the one endpoint that
+        announces itself as making them, rather than hiding a second one inside
+        a call the user thinks of as saving a cookie.
+
+        A line that parses into an account already in the pool refreshes that row
+        rather than adding a second one - identity is ``user_id``, which survives
+        a rotated cookie.
+        """
+        result = cursorparse.parse(str(text or ""))
+        added = refreshed = 0
+        for parsed in result.accounts:
+            # ``ParsedAccount`` carries no name because no input form has one, so
+            # a new row stays nameless until /api/auth/me answers for it.
+            _, existed = self._cursor.upsert(
+                CursorAccount(user_id=parsed.user_id, token=parsed.token, email=parsed.email)
+            )
+            if existed:
+                refreshed += 1
+            else:
+                added += 1
+        return {
+            "added": added,
+            "refreshed": refreshed,
+            "skipped": result.skipped,
+            "state": self._cursor_state(),
+        }
+
+    @endpoint
+    def cursor_delete(self, account_id: str) -> dict[str, Any]:
+        self._cursor.delete(str(account_id))
+        return self._cursor_state()
+
+    @endpoint
+    def cursor_reorder(self, ordered_ids: list[str]) -> dict[str, Any]:
+        self._cursor.reorder([str(account_id) for account_id in ordered_ids])
+        return self._cursor_state()
+
+    @endpoint
+    def cursor_refresh(self, account_id: str = "") -> dict[str, Any]:
+        """Ask cursor.com about one account, or about every account when blank.
+
+        Returns at once with ``busy`` true and the cards as they stand; the UI
+        polls :meth:`cursor_state` until it goes false. The same shape as
+        ``clis.refresh_async`` and the update check, for a sharper reason than
+        either: this is every account in the pool times four undocumented
+        endpoints, and no button press may block on that.
+        """
+        return self._start_cursor_refresh(str(account_id))
+
+    @endpoint
+    def cursor_use(self, account_id: str) -> dict[str, Any]:
+        """Sign Cursor in as this account, closing and restarting the editor if it is up.
+
+        ``self._cursor`` is handed over rather than letting the switch build its
+        own store: this instance's document is what the next
+        :meth:`cursor_state` reads, and a second one would record the new
+        ``current`` on disk while the green dot stayed where it was.
+
+        ``files``, ``backups`` and ``warnings`` are spread beside the state
+        exactly as :meth:`switch_provider` spreads them, so the toast after a
+        Cursor switch is the same toast as after a Claude switch.
+        """
+        outcome = cursorswitch.use(str(account_id), self._cursor)
+        return {
+            "state": self._cursor_state(),
+            "files": outcome.result.files,
+            "backups": outcome.result.backups,
+            "warnings": outcome.result.warnings,
+            "closed_cursor": outcome.closed_cursor,
+            "relaunched": outcome.relaunched,
+        }
+
+    # ------------------------------------------------------- cursor background
+
+    def _cursor_busy(self) -> bool:
+        worker = self._cursor_worker
+        return worker is not None and worker.is_alive()
+
+    def join_cursor_refresh(self, timeout: float = 5.0) -> None:
+        """Wait for an in-flight refresh. For tests; nothing in the app needs it.
+
+        The hazard ``clis.join_worker`` exists for, one step worse: a worker
+        still running when a test ends would merge cursor.com's answers into
+        whatever pool the next test's sandbox points at.
+        """
+        worker = self._cursor_worker
+        if worker is not None:
+            worker.join(timeout=timeout)
+
+    def _start_cursor_refresh(self, account_id: str = "") -> dict[str, Any]:
+        """Start a background refresh unless one is already in flight.
+
+        An account with no token stored is left out. ``cookie_header`` refuses
+        one, so including it would spend a worker to record a message the card
+        already makes plain.
+        """
+        with self._cursor_lock:
+            if not self._cursor_busy():
+                accounts = [a for a in self._cursor_targets(account_id) if a.token]
+                if accounts:
+                    self._cursor_worker = threading.Thread(
+                        target=self._run_cursor_refresh,
+                        args=(accounts,),
+                        name="upool-cursor",
+                        daemon=True,
+                    )
+                    self._cursor_worker.start()
+        return self._cursor_state()
+
+    def _cursor_targets(self, account_id: str) -> list[CursorAccount]:
+        """One named account, or all of them when the id is blank.
+
+        An unknown id raises rather than refreshing nothing: a Refresh pressed on
+        a card that is no longer there is worth a sentence, and the endpoint
+        wrapper turns it into one.
+        """
+        if account_id:
+            return [self._cursor.get(account_id)]
+        return self._cursor.list_accounts()
+
+    def _run_cursor_refresh(self, accounts: list[CursorAccount]) -> None:
+        """Fetch on a background thread and fold each answer into the pool.
+
+        Unlike ``clis``, there is no cache to leave in a sane state on the way
+        out: the store is the cache and ``busy`` is the thread being alive, so
+        it clears itself however this ends. That is why a failure is printed and
+        dropped rather than written back over the accounts as a row of errors -
+        yesterday's plan and usage are better than blanks, which is the same
+        rule ``AccountFacts`` applies one call down.
+        """
+        try:
+            for facts in cursorapi.fetch_many(accounts):
+                try:
+                    self._cursor.merge_facts(facts.account_id, facts)
+                except UPoolError:
+                    # Deleted while its answer was in flight.
+                    continue
+        except Exception:  # noqa: BLE001 - a refresh must never take the app down
+            traceback.print_exc()
+
+    def _adopt_live_session(self) -> None:
+        """First run: put the account Cursor is already signed in as into the pool.
+
+        Without it the first switch would throw away a session the user has no
+        other copy of - the pool would hold only what they pasted, the editor's
+        own account would be overwritten, and there would be nothing to switch
+        back to. ``Store._first_entries`` imports a live provider setup on first
+        run for exactly this reason.
+
+        The stored values go through the paste parser rather than being read out
+        of a named field, because which key holds the credential - and whether it
+        holds it in cookie form at all - is the section 6 measurement
+        ``vscdb.AUTH_KEYS`` is still waiting for. So this imports nothing today,
+        and starts working the moment that tuple names a key whose value is a
+        session token, with no second place to update.
+        """
+        try:
+            if self._cursor.list_accounts():
+                return
+            found = cursorparse.parse("\n".join(cursorvscdb.read_auth().values())).accounts
+            if not found:
+                return
+            account, _ = self._cursor.upsert(
+                CursorAccount(
+                    user_id=found[0].user_id,
+                    token=found[0].token,
+                    email=found[0].email,
+                    name=LIVE_SESSION_NAME,
+                )
+            )
+            # Cursor wrote that database itself, so this records what is in it
+            # rather than claiming a switch happened - which is what set_current
+            # is for. The only caller outside switch.py entitled to say it.
+            self._cursor.set_current(account.id)
+        except (UPoolError, OSError):
+            # A Cursor database that cannot be read, or a pool that cannot be
+            # written, must not stop the app from starting. Same refusal
+            # ``Store._first_entries`` makes about a broken live config.
+            return
 
     # ------------------------------------------------------------------ shell
 

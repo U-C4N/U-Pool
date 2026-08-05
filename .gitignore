@@ -29,3 +29,6 @@ ui/tsconfig.tsbuildinfo
 # Local agent tooling
 skills-lock.json
 .agents/
+
+# Playwright MCP page snapshots, written when an agent drives the UI.
+.playwright-mcp/

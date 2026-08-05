@@ -10,7 +10,7 @@ Python backend · Next.js UI · native OS webview — no Electron, no Node at ru
   <a href="https://github.com/U-C4N/U-Pool/stargazers"><img src="https://img.shields.io/github/stars/U-C4N/U-Pool?style=for-the-badge&logo=github&color=007aff" alt="Stars" /></a>
   <a href="https://github.com/U-C4N/U-Pool/network/members"><img src="https://img.shields.io/github/forks/U-C4N/U-Pool?style=for-the-badge&logo=github&color=0a84ff" alt="Forks" /></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+" />
-  <img src="https://img.shields.io/badge/version-0.7.0-informational?style=for-the-badge" alt="Version 0.7.0" />
+  <img src="https://img.shields.io/badge/version-0.8.0-informational?style=for-the-badge" alt="Version 0.8.0" />
 </p>
 
 ## Screenshot
@@ -50,6 +50,7 @@ Switching between Anthropic, OpenRouter, DeepSeek, Azure, xAI, and custom relays
 | **Permission switches** | Per-provider checkboxes for bypass mode, auto-accept edits, project MCP trust, Codex approvals/sandbox and live web search |
 | **Claude Desktop** | A tab, preview only — providers you add there are saved, nothing is written yet |
 | **Hermes & OpenCode** | Two more tabs with their own config writers — `config.yaml` is spliced section by section, `opencode.json` merged key by key |
+| **Cursor pool** | A sixth tab holding Cursor accounts — paste cookies in any common form, see name, email, plan and usage per account, switch with one button |
 | **CLI versions** | The header reports the installed Claude Code and Codex versions; refresh re-probes the machine |
 | **Delete all sessions** | Two red buttons in Settings that erase each CLI's transcripts and prompt history — and nothing else in those folders |
 | **In-app updates** | Settings shows a pulsing Update button when a newer release is out, downloads it and swaps itself |
@@ -71,8 +72,9 @@ Switching between Anthropic, OpenRouter, DeepSeek, Azure, xAI, and custom relays
 | Codex | `HKCU\Environment` | Whatever the provider's `env_key` is named, plus `OPENAI_BASE_URL` |
 | Hermes | `%LOCALAPPDATA%\hermes\config.yaml` | One entry under `providers:`, plus `model.provider` and `model.default` |
 | OpenCode | `~/.config/opencode/opencode.json` | One entry under `provider`, plus `$schema` and the top-level `model` |
+| Cursor | `%APPDATA%\Cursor\...\state.vscdb` | The `cursorAuth/*` rows in `ItemTable`, and nothing else in the database |
 
-Hermes and OpenCode read their keys out of their own config files, so neither writes anything to `HKCU\Environment`.
+Hermes, OpenCode and Cursor read their credentials out of their own files, so none of them writes anything to `HKCU\Environment`.
 
 ### What a switch leaves alone
 
@@ -126,6 +128,20 @@ A switch removes only the entry U-Pool wrote before. Providers you added yoursel
 `~/.config/opencode/opencode.json` on every platform, including Windows, or wherever `OPENCODE_CONFIG` points. A provider is an entry under `provider` with `npm`, `name`, `options.baseURL`, `options.apiKey` and `models`; the top-level `model` selects it as `"<provider>/<model>"`, which is why the model id is required rather than optional here.
 
 `npm` picks the AI SDK adapter — `@ai-sdk/anthropic` for Claude-shaped endpoints, `@ai-sdk/openai-compatible` for most relays. Headers and SDK flags you add through **Extra SDK options** are kept when the key is rotated.
+
+### Cursor pool
+
+The Cursor tab is a pool of accounts rather than a list of providers — a Cursor account has no base URL and no API key, only a session cookie. **Add account** takes one paste box that accepts whatever you have: a Netscape `cookies.txt` line, a bare `WorkosCursorSessionToken=…`, a raw `user_…::token`, an `email,token` CSV row, or JSON. Paste one line or two hundred; unrecognised lines are counted and skipped, so a whole browser export works as-is.
+
+Accounts are identified by the user id in the cookie, not by email. Re-pasting a rotated cookie for an account already in the pool refreshes its token in place and keeps its position.
+
+Every account is refreshed in the background on launch, against the same endpoints the cursor.com dashboard uses — `/api/auth/me` for name and email, `/api/auth/stripe` for the plan, `/api/usage-summary` (or the legacy `/api/usage`) for the meter. Those endpoints are undocumented and will change: a field that stops arriving renders as `—` and never breaks the switch. A rejected cookie marks the row **Expired** and disables its button; the row itself stays, so pasting a fresh cookie revives it.
+
+**Use** closes Cursor, backs up `state.vscdb` beside itself, writes the auth keys and starts Cursor again. If Cursor does not close within ten seconds, **nothing is written** — you may have unsaved work, and a half-applied auth record leaves an editor that can neither sign in nor sign out. There is no force kill.
+
+What a switch owns in that database is the `cursorAuth/*` rows in `ItemTable`, and nothing else. `cursorDiskKV` and `composerHeaders` — your Cursor conversations — are never opened, and neither are the `mcpOAuth.secret.*` rows sitting in the same table. The telemetry machine ids in `storage.json` and `%APPDATA%\Cursor\machineId` are **not** touched: resetting those is not part of switching accounts.
+
+Session tokens live in `~/.u-pool/cursor.json` in plain text, the same as the provider API keys in `config.json`.
 
 ### CLI versions
 

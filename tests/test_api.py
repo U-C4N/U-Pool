@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,8 @@ import pytest
 from upool import autostart, paths, settings, winenv
 from upool.adapters.claude_desktop import PREVIEW_WARNING
 from upool.api import Api
+from upool.cursor import api as cursorapi
+from upool.cursor.api import AccountFacts
 from upool.models import (
     APP_CLAUDE,
     APP_CLAUDE_DESKTOP,
@@ -31,6 +34,25 @@ def draft(**kwargs) -> dict:
     }
     payload.update(kwargs)
     return payload
+
+
+def cookie(user_id: str, token: str) -> str:
+    """One ``WorkosCursorSessionToken`` line, in the shape a browser hands over."""
+    return f"WorkosCursorSessionToken={user_id}%3A%3A{token}"
+
+
+@pytest.fixture(autouse=True)
+def no_cursor_network(monkeypatch):
+    """No test in this file may reach cursor.com.
+
+    ``bootstrap`` starts a refresh over every account in the pool, so a test that
+    adds one and then bootstraps would send that cookie to the real endpoints.
+    Most tests here leave the pool empty and never start a thread at all, but
+    that is a property of the test rather than of the suite, and it is not
+    something the next person to add a Cursor test should have to remember. The
+    tests that are about the refresh replace this with their own answer.
+    """
+    monkeypatch.setattr(cursorapi, "fetch_many", lambda accounts, *args, **kwargs: [])
 
 
 def test_bootstrap_returns_every_app_in_tab_order():
@@ -266,3 +288,220 @@ def test_launch_at_startup_round_trips():
     assert settings.load()["launch_at_startup"] is True
     assert api.set_launch_at_startup(False)["data"]["launch_at_startup"] is False
     assert settings.load()["launch_at_startup"] is False
+
+
+# ---------------------------------------------------------------------- cursor
+
+
+def test_cursor_state_starts_empty_and_points_at_the_sandboxed_database(sandbox):
+    state = Api().cursor_state()["data"]
+
+    assert set(state) == {"accounts", "current", "busy", "running", "supported", "db_path"}
+    assert state["accounts"] == []
+    assert state["current"] == ""
+    assert state["busy"] is False
+    # conftest stubs the process probe: the suite must never ask about - let
+    # alone close - the developer's own editor.
+    assert state["running"] is False
+    # No Cursor install inside the fake home, which is the honest answer for a
+    # machine that has never run it.
+    assert state["supported"] is False
+    assert state["db_path"].startswith(str(sandbox))
+    assert state["db_path"].endswith("state.vscdb")
+
+
+def test_cursor_add_counts_what_it_read_and_what_it_could_not(sandbox):
+    api = Api()
+    paste = "\n".join(
+        [
+            "# Netscape HTTP Cookie File",
+            cookie("user_01AB", "token-a"),
+            cookie("user_02CD", "token-b"),
+            "not a cookie at all",
+        ]
+    )
+    first = api.cursor_add(paste)["data"]
+
+    assert (first["added"], first["refreshed"], first["skipped"]) == (2, 0, 2)
+    assert [a["user_id"] for a in first["state"]["accounts"]] == ["user_01AB", "user_02CD"]
+
+    # A rotated cookie for an account already in the pool refreshes that row
+    # rather than adding a second one, and it keeps the position it had.
+    again = api.cursor_add(cookie("user_01AB", "token-a-rotated"))["data"]
+    assert (again["added"], again["refreshed"], again["skipped"]) == (0, 1, 0)
+    assert [a["user_id"] for a in again["state"]["accounts"]] == ["user_01AB", "user_02CD"]
+
+
+def test_a_cursor_summary_never_carries_the_session_cookie():
+    api = Api()
+    state = api.cursor_add(cookie("user_01AB", "eyJ-the-whole-account"))["data"]["state"]
+
+    row = state["accounts"][0]
+    assert "token" not in row
+    assert row["has_token"] is True
+    assert "eyJ-the-whole-account" not in json.dumps(state)
+    # And it really was stored - the assertion above is about the response, not
+    # about the paste having been dropped on the floor.
+    assert "eyJ-the-whole-account" in paths.cursor_accounts_file().read_text(encoding="utf-8")
+
+
+def test_cursor_delete_answers_with_the_whole_state():
+    api = Api()
+    api.cursor_add(cookie("user_01AB", "token-a"))
+    second = api.cursor_add(cookie("user_02CD", "token-b"))["data"]["state"]["accounts"][1]
+
+    state = api.cursor_delete(second["id"])["data"]
+    assert [a["user_id"] for a in state["accounts"]] == ["user_01AB"]
+    assert api.cursor_delete(second["id"]) == {
+        "ok": False,
+        "error": "That account is no longer in the pool.",
+    }
+
+
+def test_cursor_reorder_answers_with_the_order_it_stored():
+    api = Api()
+    api.cursor_add("\n".join([cookie("user_01AB", "token-a"), cookie("user_02CD", "token-b")]))
+    ids = [a["id"] for a in api.cursor_state()["data"]["accounts"]]
+
+    state = api.cursor_reorder(list(reversed(ids)))["data"]
+    assert [a["id"] for a in state["accounts"]] == list(reversed(ids))
+    assert api.cursor_reorder(["not-an-id"])["ok"] is False
+
+
+def test_a_refresh_with_nothing_to_refresh_starts_no_thread():
+    # Which is why the rest of this suite can bootstrap freely: an empty pool
+    # never spawns a worker that could outlive the test that started it.
+    assert Api().cursor_refresh()["data"]["busy"] is False
+
+
+def test_cursor_refresh_answers_at_once_and_fills_the_card_afterwards(monkeypatch):
+    api = Api()
+    api.cursor_add(cookie("user_01AB", "token-a"))
+    gate = threading.Event()
+    asked: list[str] = []
+
+    def answer(accounts, *args, **kwargs):
+        asked.extend(account.user_id for account in accounts)
+        gate.wait(5)
+        return [
+            AccountFacts(
+                account_id=accounts[0].id,
+                status="ok",
+                email="who@example.com",
+                name="Umut Can",
+                plan="Pro",
+                usage_used=12.4,
+                usage_limit=20.0,
+                usage_unit="usd",
+                usage_percent=62.0,
+            )
+        ]
+
+    monkeypatch.setattr(cursorapi, "fetch_many", answer)
+
+    started = api.cursor_refresh()["data"]
+    assert started["busy"] is True
+    # Answered before the network did, with the card exactly as it stood.
+    assert started["accounts"][0]["email"] == ""
+
+    gate.set()
+    api.join_cursor_refresh()
+
+    settled = api.cursor_state()["data"]
+    assert asked == ["user_01AB"]
+    assert settled["busy"] is False
+    row = settled["accounts"][0]
+    assert (row["email"], row["name"], row["plan"], row["status"]) == (
+        "who@example.com",
+        "Umut Can",
+        "Pro",
+        "ok",
+    )
+    assert (row["usage_used"], row["usage_limit"], row["usage_unit"]) == (12.4, 20.0, "usd")
+    assert row["last_checked"] > 0
+    assert "token" not in row
+
+
+def test_refreshing_an_account_that_is_gone_is_an_envelope_not_a_crash():
+    assert Api().cursor_refresh("no-such-account") == {
+        "ok": False,
+        "error": "That account is no longer in the pool.",
+    }
+
+
+def test_cursor_use_surfaces_a_refusal_instead_of_raising():
+    from upool.cursor.switch import PENDING_KEYS_NOTE
+
+    api = Api()
+    row = api.cursor_add(cookie("user_01AB", "token-a"))["data"]["state"]["accounts"][0]
+
+    # The key list Cursor writes on sign-in has not been measured yet, so the
+    # switch refuses before it touches the editor - and the bridge renders that
+    # as an envelope rather than letting it reach the webview.
+    assert api.cursor_use(row["id"]) == {"ok": False, "error": PENDING_KEYS_NOTE}
+    assert api.cursor_state()["data"]["current"] == ""
+    assert api.cursor_use("no-such-account")["ok"] is False
+
+
+def test_cursor_use_spreads_the_switch_outcome_beside_the_state(monkeypatch):
+    from upool.adapters.base import ApplyResult
+    from upool.cursor import switch as cursorswitch
+    from upool.cursor.switch import SwitchOutcome
+
+    api = Api()
+    row = api.cursor_add(cookie("user_01AB", "token-a"))["data"]["state"]["accounts"][0]
+
+    def fake_use(account_id, pool=None):
+        # Writing through the store it was handed is what proves the bridge
+        # passed its own: a second store would record this on disk and leave the
+        # state below still reporting nobody as current.
+        pool.set_current(account_id)
+        result = ApplyResult()
+        result.files.append("state.vscdb")
+        result.backups.append("state.vscdb.backup")
+        result.warnings.append("Cursor could not be started from here.")
+        return SwitchOutcome(result=result, closed_cursor=True, relaunched=False)
+
+    monkeypatch.setattr(cursorswitch, "use", fake_use)
+    data = api.cursor_use(row["id"])["data"]
+
+    assert set(data) == {"state", "files", "backups", "warnings", "closed_cursor", "relaunched"}
+    assert data["files"] == ["state.vscdb"]
+    assert data["backups"] == ["state.vscdb.backup"]
+    assert data["warnings"] == ["Cursor could not be started from here."]
+    assert (data["closed_cursor"], data["relaunched"]) == (True, False)
+    assert data["state"]["current"] == row["id"]
+    assert data["state"]["accounts"][0]["active"] is True
+
+
+def test_bootstrap_carries_the_cursor_pool():
+    data = Api().bootstrap()["data"]
+    assert set(data["cursor"]) == {
+        "accounts",
+        "current",
+        "busy",
+        "running",
+        "supported",
+        "db_path",
+    }
+    assert data["cursor"]["accounts"] == []
+
+
+def test_bootstrap_starts_the_cursor_refresh_before_it_takes_the_snapshot(monkeypatch):
+    api = Api()
+    api.cursor_add(cookie("user_01AB", "token-a"))
+    gate = threading.Event()
+
+    def answer(accounts, *args, **kwargs):
+        gate.wait(5)
+        return []
+
+    monkeypatch.setattr(cursorapi, "fetch_many", answer)
+    try:
+        # busy has to be true on first paint: the UI only polls while it is, so a
+        # snapshot taken before the thread started would leave the cards on their
+        # stored figures until someone pressed Refresh all.
+        assert api.bootstrap()["data"]["cursor"]["busy"] is True
+    finally:
+        gate.set()
+        api.join_cursor_refresh()

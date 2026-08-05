@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CursorPool } from "@/components/CursorPool";
 import { Header } from "@/components/Header";
 import { ProviderForm } from "@/components/ProviderForm";
 import { ProviderList, type RowHandlers } from "@/components/ProviderList";
@@ -20,6 +21,7 @@ import type {
   ProviderDetail,
   ProviderSummary,
   SessionSummary,
+  TabId,
   UpdateStatus,
 } from "@/lib/types";
 
@@ -50,6 +52,11 @@ function shortList(names: string[], limit = 3): string {
 
 export default function Page() {
   const [apps, setApps] = useState<AppInfo[]>([]);
+  // Two pieces of state for one row of tabs, because Cursor is a tab and not an
+  // app: `app` stays a real `AppId` while the Cursor tab is open, so the provider
+  // calls, the per-app state map and the Settings panel keep working on the app
+  // the user was last looking at rather than on something that cannot answer.
+  const [tab, setTab] = useState<TabId>("claude");
   const [app, setApp] = useState<AppId>("claude");
   const [states, setStates] = useState<Partial<Record<AppId, AppState>>>({});
   const [health, setHealth] = useState<Record<string, HealthResult>>({});
@@ -74,6 +81,9 @@ export default function Page() {
   const [sessionErrors, setSessionErrors] = useState<Record<string, string[]>>({});
   const [pendingPurge, setPendingPurge] = useState<string | null>(null);
   const [paths, setPaths] = useState<AppPaths | null>(null);
+  // Where Cursor keeps the database a switch writes. Only the backend knows it,
+  // and only the Settings panel shows it, so it is read when that panel opens.
+  const [cursorDb, setCursorDb] = useState("");
   const [meta, setMeta] = useState({ version: "", platform: "" });
   const [loadError, setLoadError] = useState<string | null>(null);
   // Resolved after mount only: the prerendered HTML must not depend on it.
@@ -95,6 +105,7 @@ export default function Page() {
         setApps(data.apps);
         setStates(data.state);
         setApp(data.apps[0]?.id ?? "claude");
+        setTab(data.apps[0]?.id ?? "claude");
         setMeta({ version: data.version, platform: data.platform });
         setSettings(data.settings);
         setUpdate(data.update);
@@ -112,6 +123,13 @@ export default function Page() {
 
   const apply = useCallback((target: AppId, next: AppState) => {
     setStates((current) => ({ ...current, [target]: next }));
+  }, []);
+
+  const selectTab = useCallback((next: TabId) => {
+    setTab(next);
+    // Cursor leaves `app` where it was, for the reason given at its declaration.
+    if (next !== "cursor") setApp(next);
+    setView({ mode: "list" });
   }, []);
 
   const run = useCallback(
@@ -385,6 +403,22 @@ export default function Page() {
     [push],
   );
 
+  // The Cursor tab holds its own state and may never have been opened, so the
+  // panel asks for the one field it shows rather than keeping a copy in sync.
+  useEffect(() => {
+    if (!settingsOpen) return;
+    let cancelled = false;
+    backend
+      .cursorState()
+      // Left empty when Cursor is not installed: there would be nothing to
+      // reveal, and `open_path` creates the folder it is pointed at.
+      .then((next) => !cancelled && setCursorDb(next.supported ? next.db_path : ""))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsOpen]);
+
   // The registry is only read while the panel that shows it is open, and again
   // if the active app changes underneath it.
   useEffect(() => {
@@ -494,13 +528,10 @@ export default function Page() {
     <main className="min-h-screen">
       <Header
         apps={apps}
-        activeApp={app}
+        activeTab={tab}
         version={meta.version}
         clis={clis}
-        onSelectApp={(next) => {
-          setApp(next);
-          setView({ mode: "list" });
-        }}
+        onSelectTab={selectTab}
         onAdd={handleAdd}
         onTestAll={handleTestAll}
         onOpenFolder={() => state.files[0] && openPath(state.files[0])}
@@ -523,7 +554,14 @@ export default function Page() {
         </p>
       ) : null}
 
-      {view.mode === "list" ? (
+      {/*
+        The Cursor tab replaces the whole provider view rather than sitting
+        inside it: it brings its own page container, its own heading and its own
+        state, because none of `AppState` describes a Cursor account.
+      */}
+      {tab === "cursor" ? (
+        <CursorPool onToast={push} />
+      ) : view.mode === "list" ? (
         <div className="animate-fade-in mx-auto w-full max-w-[720px] px-5 py-6">
           <div className="mb-5 px-1">
             <h1 className="display-title text-[var(--color-label)]">Providers</h1>
@@ -620,6 +658,7 @@ export default function Page() {
           version={meta.version}
           platform={meta.platform}
           paths={paths}
+          cursorDb={cursorDb}
           liveFiles={state.files}
           settings={settings}
           env={env}

@@ -96,6 +96,14 @@ export function AnthropicLogo({ className, title = "Anthropic" }: MarkProps) {
   return <MaskMark src="/brands/anthropic.svg" className={className} title={title} />;
 }
 
+/**
+ * Drawn as three faces with the seams left transparent, so the mask keeps the
+ * faceted cube. A solid silhouette of the same outline is just a hexagon.
+ */
+export function CursorLogo({ className, title = "Cursor" }: MarkProps) {
+  return <MaskMark src="/brands/cursor.svg" className={className} title={title} />;
+}
+
 export function PresetIcon({
   presetId,
   name,

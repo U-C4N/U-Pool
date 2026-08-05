@@ -27,6 +27,17 @@ function shortenPath(path: string, home: string): string {
   return root && normal.startsWith(`${root}/`) ? `~${normal.slice(root.length)}` : normal;
 }
 
+/**
+ * `cursor.json` sits beside `config.json` in U-Pool's own folder, so the panel
+ * builds it from the path it already has rather than inventing a directory:
+ * `app_paths` predates the Cursor pool and still reports the provider store
+ * only. If it ever names this file, take it from there instead.
+ */
+function siblingFile(path: string, name: string): string {
+  const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return cut < 0 ? name : `${path.slice(0, cut + 1)}${name}`;
+}
+
 function CliRow({ tool }: { tool: CliVersions["tools"][number] }) {
   return (
     <div className="flex items-center gap-3 rounded-[10px] bg-[var(--color-fill)] px-3 py-2.5">
@@ -284,6 +295,7 @@ export function SettingsPanel({
   version,
   platform,
   paths,
+  cursorDb,
   liveFiles,
   settings,
   savingSettings,
@@ -310,6 +322,8 @@ export function SettingsPanel({
   version: string;
   platform: string;
   paths: AppPaths | null;
+  /** Cursor's state database, or empty when Cursor is not installed here. */
+  cursorDb: string;
   liveFiles: string[];
   settings: AppSettings | null;
   savingSettings: boolean;
@@ -480,6 +494,30 @@ export function SettingsPanel({
           ) : (
             <p className="text-xs text-zinc-400">Loading...</p>
           )}
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Cursor</p>
+          {paths ? (
+            <PathRow
+              label="Account pool"
+              value={siblingFile(paths.config, "cursor.json")}
+              onOpen={() => onOpen(siblingFile(paths.config, "cursor.json"))}
+            />
+          ) : null}
+          {cursorDb ? (
+            <PathRow label="State database" value={cursorDb} onOpen={() => onOpen(cursorDb)} />
+          ) : (
+            <p className="text-xs text-zinc-400">
+              U-Pool did not find Cursor here, so there is no state database to open. The Cursor
+              tab names the path it looked in.
+            </p>
+          )}
+          <p className="text-[11px] leading-relaxed text-zinc-400">
+            A switch rewrites the cursorAuth keys inside state.vscdb and nothing else — your
+            conversations, composer state and MCP secrets are in the same file and are left exactly
+            as they are.
+          </p>
         </div>
 
         <div className="space-y-2">

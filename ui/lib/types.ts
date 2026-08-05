@@ -1,5 +1,17 @@
 export type AppId = "claude" | "claude_desktop" | "codex" | "hermes" | "opencode";
 
+/**
+ * What the tab bar keys on. Cursor is a tab, but it is not a provider app.
+ *
+ * Do not put "cursor" into `AppId` instead. Every `Record<AppId, …>` map in the
+ * UI - brand marks, tab tints, URL hints, preset catalogues, the mock's per-app
+ * tables - is exhaustive on purpose, and widening `AppId` would force each of
+ * them to carry a Cursor entry describing a form Cursor never renders, a config
+ * file it never writes and presets it cannot have. The union widens here so
+ * those maps do not have to.
+ */
+export type TabId = AppId | "cursor";
+
 export type AuthStyle = "auth_token" | "api_key";
 export type WireApi = "responses" | "chat";
 
@@ -232,4 +244,76 @@ export interface AppPaths {
   config: string;
   backups: string;
   settings: string;
+}
+
+/** What the last refresh concluded. "unknown" is the honest answer before the first one. */
+export type CursorStatus = "ok" | "expired" | "unknown";
+
+/** Cursor meters a plan in dollars or in requests, so the unit travels with the numbers. */
+export type CursorUsageUnit = "usd" | "requests" | "";
+
+/**
+ * One pooled Cursor account, as every endpoint hands it back.
+ *
+ * The session cookie is never in here. `api.py`'s rule about provider keys is
+ * stronger for this one - the cookie is the whole account, not one endpoint's
+ * access to it - so the UI gets `has_token` and nothing else.
+ *
+ * Every usage figure is nullable because it comes from undocumented cursor.com
+ * endpoints that will change without notice; null renders as an em dash and must
+ * never stop a switch.
+ */
+export interface CursorAccountSummary {
+  id: string;
+  /** The half of the cookie before `::`. This, not the email, is identity. */
+  user_id: string;
+  email: string;
+  name: string;
+  plan: string;
+  plan_status: string;
+  usage_used: number | null;
+  usage_limit: number | null;
+  usage_unit: CursorUsageUnit;
+  usage_percent: number | null;
+  status: CursorStatus;
+  /** Milliseconds since the epoch; 0 means never refreshed. */
+  last_checked: number;
+  added_at: number;
+  active: boolean;
+  has_token: boolean;
+}
+
+export interface CursorState {
+  accounts: CursorAccountSummary[];
+  current: string;
+  /** A refresh is in flight on a background thread; the UI polls while true. */
+  busy: boolean;
+  /** Cursor.exe is running right now, so a switch has to close it first. */
+  running: boolean;
+  /** This platform, with Cursor actually installed. */
+  supported: boolean;
+  db_path: string;
+}
+
+/**
+ * A paste is counted, not itemised. A `cookies.txt` holds comments and every
+ * other domain's cookies, so naming each skipped line is noise in a 200-line
+ * paste - the toast says how many of each.
+ */
+export interface CursorAddResult {
+  added: number;
+  /** A re-pasted cookie for an account already in the pool refreshes its row. */
+  refreshed: number;
+  skipped: number;
+  state: CursorState;
+}
+
+/** Files, backups and warnings in `SwitchResult`'s shape, so the toast is the same toast. */
+export interface CursorUseResult {
+  state: CursorState;
+  files: string[];
+  backups: string[];
+  warnings: string[];
+  closed_cursor: boolean;
+  relaunched: boolean;
 }
