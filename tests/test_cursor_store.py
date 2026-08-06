@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64 as _base64
 import json
+import json as _json
 from types import SimpleNamespace
 
 import pytest
@@ -9,6 +11,11 @@ from upool import atomicio, paths
 from upool.cursor.models import STATUS_EXPIRED, STATUS_OK, STATUS_UNKNOWN, CursorAccount
 from upool.cursor.store import FACT_FIELDS, CursorStore
 from upool.models import UPoolError
+
+
+def _b64(claims: dict) -> str:
+    raw = _base64.urlsafe_b64encode(_json.dumps(claims).encode()).decode().rstrip("=")
+    return raw
 
 
 @pytest.fixture
@@ -259,6 +266,27 @@ def test_the_file_is_json_u_pool_can_read_back(pool):
     assert raw["version"] == 1
     assert raw["current"] == account.id
     assert [entry["user_id"] for entry in raw["accounts"]] == ["user_01AB"]
+
+
+def test_a_pasted_web_cookie_is_banked_as_the_web_token(pool):
+    web = "eyJ0eXAiOiJKV1QifQ." + _b64({"type": "web"}) + ".sig"
+    account, _ = pool.upsert(CursorAccount(user_id="user_1", token=web))
+    assert account.web_token == web
+
+
+def test_a_pasted_session_token_leaves_the_web_token_empty(pool):
+    sess = "eyJ0eXAiOiJKV1QifQ." + _b64({"type": "session"}) + ".sig"
+    account, _ = pool.upsert(CursorAccount(user_id="user_1", token=sess))
+    assert account.web_token == ""
+
+
+def test_upgrade_token_records_the_session_and_keeps_the_cookie(pool):
+    web = "eyJ0eXAiOiJKV1QifQ." + _b64({"type": "web"}) + ".sig"
+    original, _ = pool.upsert(CursorAccount(user_id="user_1", token=web))
+    upgraded = pool.upgrade_token(original.id, "new-session-token")
+    assert upgraded.token == "new-session-token"
+    assert upgraded.web_token == web          # the cookie survives, to re-mint later
+    assert upgraded.status == "ok"
 
 
 def test_web_token_round_trips_through_the_document():

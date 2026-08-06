@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 from .. import atomicio, paths
 from ..models import UPoolError, now_ms
-from .models import STATUS_UNKNOWN, CursorAccount, as_counter
+from .models import KIND_WEB, STATUS_OK, STATUS_UNKNOWN, CursorAccount, as_counter, token_kind
 
 if TYPE_CHECKING:  # pragma: no cover - only the annotation needs the client
     from .api import AccountFacts
@@ -157,6 +157,8 @@ class CursorStore:
                 account = CursorAccount.from_dict(existing)
                 rotated = account.token != parsed.token
                 account.token = parsed.token
+                if token_kind(parsed.token) == KIND_WEB:
+                    account.web_token = parsed.token
                 if rotated:
                     # A 401 greys the row and disables ``Use``, and pasting a
                     # fresh cookie is how that is undone - so a new token retires
@@ -178,12 +180,35 @@ class CursorStore:
             account = CursorAccount(
                 user_id=parsed.user_id,
                 token=parsed.token,
+                web_token=parsed.token if token_kind(parsed.token) == KIND_WEB else "",
                 email=parsed.email,
                 name=parsed.name,
             )
             accounts.append(account.to_dict())
             self._save()
             return account, False
+
+    def upgrade_token(self, account_id: str, session_token: str) -> CursorAccount:
+        """Record a session token minted from this row's web cookie.
+
+        ``web_token`` is left untouched: it is the only thing that can re-mint when
+        the session dies ~60 days on, so it outlives the token it produced.
+        ``status`` becomes ``ok`` - a row that just proved it can sign in is not
+        expired, whatever a prior refresh concluded - and the usage figures are
+        left alone, since they were true when they were measured.
+        """
+        with self._lock:
+            accounts = self.data()["accounts"]
+            for index, existing in enumerate(accounts):
+                if existing.get("id") != account_id:
+                    continue
+                account = CursorAccount.from_dict(existing)
+                account.token = session_token
+                account.status = STATUS_OK
+                accounts[index] = account.to_dict()
+                self._save()
+                return account
+        raise UPoolError(f"No Cursor account with id {account_id}.")
 
     def merge_facts(self, account_id: str, facts: AccountFacts) -> CursorAccount:
         """Fold what a refresh learned into the stored record, field by field.
