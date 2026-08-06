@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import io
 import json
 
 import pytest
@@ -43,8 +42,11 @@ def _router(**answers):
 
     answers: keys 'deep' (the GET), 'confirm' (the POST), 'poll' -> _Resp.
     A missing key means that call is never expected; hitting it fails loudly.
+    The real `_open` now takes an opener as its first argument, threaded in so
+    the GET and the POST can share a cookie jar - the stub ignores it, since the
+    fake responses below carry no real cookies to collect.
     """
-    def _open(request, timeout=None):
+    def _open(opener, request, timeout=None):
         url = request.full_url
         if "loginDeepControl" in url and request.get_method() == "GET":
             return answers["deep"]
@@ -102,4 +104,11 @@ def test_an_unparseable_poll_body_is_an_error_not_a_crash(net):
 def test_a_token_minted_for_a_different_account_is_refused(net):
     net(deep=_Resp(200, b"<html>"), confirm=_Resp(200, b"OK"), poll=_session_poll("user_99SOMEONEELSE"))
     with pytest.raises(UPoolError, match="different account"):
+        deeplogin.exchange(USER, WEB)
+
+
+def test_a_poll_with_no_authid_is_refused_not_waved_through(net):
+    poll = _Resp(200, json.dumps({"accessToken": SESSION_JWT, "authId": ""}).encode())
+    net(deep=_Resp(200, b"<html>"), confirm=_Resp(200, b"OK"), poll=poll)
+    with pytest.raises(UPoolError):
         deeplogin.exchange(USER, WEB)

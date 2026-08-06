@@ -358,8 +358,8 @@ const mockCursor: { current: string; busy: boolean; running: boolean; accounts: 
       status: "ok",
       last_checked: agoMinutes(11),
       added_at: agoMinutes(60 * 24 * 9),
-      // Pasted from a browser: a web token, so the card shows its usage but Use
-      // is disabled - writing it would sign the desktop app out.
+      // Pasted from a browser: a web token, shown with its usage, and
+      // converted to a session token on Use rather than written as-is.
       token_kind: "web",
     },
     {

@@ -284,9 +284,9 @@ export interface CursorAccountSummary {
   has_web_token: boolean;
   /**
    * Which kind of credential the stored token is, never the token itself. A
-   * browser cookie is a `web` token: it fills the card but cannot sign the
-   * desktop app in, so the card disables Use on it. A desktop sign-in is a
-   * `session` token, which does.
+   * browser cookie is a `web` token: it fills the card, and is converted to a
+   * `session` token on Use rather than written to the desktop app as-is. A
+   * desktop sign-in is already a `session` token.
    */
   token_kind: CursorTokenKind;
 }

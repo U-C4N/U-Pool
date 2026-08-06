@@ -161,8 +161,9 @@ class CursorAccount:
         data.pop("avatar", None)
         data["active"] = bool(active)
         data["has_token"] = bool(self.token)
-        # Not the token, but what kind it is - the card disables Use on a browser
-        # cookie, which shows usage but cannot sign the desktop app in.
+        # Not the token, but what kind it is - so the card can label a browser
+        # cookie row, which is converted to a session token on Use rather than
+        # blocked.
         data["token_kind"] = token_kind(self.token)
         return data
 
