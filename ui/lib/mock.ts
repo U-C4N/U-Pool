@@ -310,7 +310,7 @@ function emptySummary(app: string): SessionSummary {
 const CURSOR_DB_PATH = "%APPDATA%/Cursor/User/globalStorage/state.vscdb";
 
 /** The stored record: a summary plus the credential the UI never receives. */
-type CursorRecord = Omit<CursorAccountSummary, "active" | "has_token"> & { token: string };
+type CursorRecord = Omit<CursorAccountSummary, "active" | "has_token" | "has_web_token"> & { token: string };
 
 const agoMinutes = (count: number) => Date.now() - count * 60_000;
 
@@ -533,6 +533,7 @@ function cursorState(): CursorState {
       ...rest,
       active: rest.id === mockCursor.current,
       has_token: Boolean(token),
+      has_web_token: rest.token_kind === "web",
     })),
     current: mockCursor.current,
     busy: mockCursor.busy,

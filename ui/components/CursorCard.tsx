@@ -157,18 +157,16 @@ export function CursorCard({
   // Nothing has ever answered for this row and a refresh is running, so it
   // shimmers rather than reading as a real zero.
   const pending = poolBusy && account.last_checked === 0;
-  // An expired row is never removed on its own - it still carries the name and
-  // email that let a fresh cookie revive it in place - so the reason it cannot
-  // be used has to be on the button.
-  const blocked = expired
-    ? "This account's session has expired — paste a fresh cookie for it."
+  // Mirror switch._ensure_session_token: a browser cookie is now converted on
+  // Use, not refused, so it no longer blocks. Only a truly dead row does - an
+  // expired session with no cookie behind it to re-mint from.
+  const blocked = !supported
+    ? "U-Pool could not find Cursor on this machine."
     : !account.has_token
       ? "No session cookie is stored for this account."
-      : account.token_kind === "web"
-        ? "This is a browser cookie — it shows usage, but can't sign the Cursor app in. Sign into this account in Cursor and U-Pool will pick the session up."
-        : !supported
-          ? "U-Pool could not find Cursor on this machine."
-          : "";
+      : expired && account.token_kind === "session" && !account.has_web_token
+        ? "This account's session has expired — paste a fresh cookie for it."
+        : "";
 
   return (
     <li
