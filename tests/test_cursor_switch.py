@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from upool import paths
-from upool.cursor import process, switch, vscdb
+from upool.cursor import deeplogin, process, switch, vscdb
 from upool.cursor.models import STATUS_EXPIRED, CursorAccount
 from upool.cursor.store import CursorStore
 from upool.models import UPoolError
@@ -55,9 +55,20 @@ def db() -> Path:
 
 @pytest.fixture
 def pool() -> CursorStore:
+    """Two accounts, each holding a live session token.
+
+    A ``session``-kind token because that is the one kind
+    ``switch._ensure_session_token`` accepts as-is; anything else now sends the
+    switch through the (unstubbed, network-reaching) deep-login exchange, which
+    is exactly what the tests that want that path set up for themselves.
+    """
     store = CursorStore()
-    store.upsert(CursorAccount(user_id="user_01AB", token="eyJ-first", email="a@example.com"))
-    store.upsert(CursorAccount(user_id="user_02CD", token="eyJ-second", email="b@example.com"))
+    store.upsert(
+        CursorAccount(user_id="user_01AB", token=jwt_of_type("session", "first"), email="a@example.com")
+    )
+    store.upsert(
+        CursorAccount(user_id="user_02CD", token=jwt_of_type("session", "second"), email="b@example.com")
+    )
     return store
 
 
@@ -103,6 +114,19 @@ def record(monkeypatch, *, running=False, closes=True, launches=True) -> list[st
     monkeypatch.setattr(process, "launch", _launch)
     monkeypatch.setattr(vscdb, "write_auth", _write_auth)
     return calls
+
+
+def jwt_of_type(kind: str, tag: str = "") -> str:
+    """A three-segment token whose payload declares ``type``: what the desktop
+    stores as ``session`` and what a browser exports as ``web``.
+
+    ``tag`` exists only so two same-kind tokens (the ``pool`` fixture's two
+    accounts) come out distinguishable - useful when a test asserts which
+    account's token ended up written.
+    """
+    claims = f'"type":"{kind}"' + (f',"tag":"{tag}"' if tag else "")
+    payload = base64.urlsafe_b64encode(f"{{{claims}}}".encode()).rstrip(b"=").decode()
+    return f"eyJhbGciOiJIUzI1NiJ9.{payload}.sig"
 
 
 def test_a_closed_cursor_is_never_asked_to_close(measured, db, pool, monkeypatch):
@@ -174,56 +198,101 @@ def test_a_cursor_that_will_not_start_again_is_a_warning_not_a_failure(
     assert pool.current_id() == account.id
 
 
-def test_an_expired_account_is_refused_by_name(measured, db, pool, monkeypatch):
-    calls = record(monkeypatch, running=True)
-    account = first(pool)
-    pool.data()["accounts"][0]["status"] = STATUS_EXPIRED
-
-    with pytest.raises(UPoolError, match="a@example.com") as excinfo:
-        switch.use(account.id, pool)
-
-    assert "expired" in str(excinfo.value)
-    # Refused before the editor was so much as looked at, let alone closed.
-    assert calls == []
-    assert pool.current_id() == ""
-
-
 def test_an_account_with_no_cookie_is_refused(measured, db, pool, monkeypatch):
-    """Only a hand-edited cursor.json can produce this, and writing it would sign
-    the editor out rather than fail."""
+    """Only a hand-edited cursor.json can produce this: no session token and no
+    web cookie behind it either, so there is nothing left to convert or revive.
+
+    Folded into ``_ensure_session_token``'s case 3 along with a genuinely expired
+    session - both are "nothing this process can do without a fresh paste" - so
+    the message is the same one that case raises, not a dedicated "no cookie" line.
+    """
     calls = record(monkeypatch, running=True)
     account = first(pool)
     pool.data()["accounts"][0]["token"] = ""
 
-    with pytest.raises(UPoolError, match="no session cookie"):
+    with pytest.raises(UPoolError, match="expired"):
         switch.use(account.id, pool)
 
     assert calls == []
 
 
-def jwt_of_type(kind: str) -> str:
-    """A three-segment token whose payload declares ``type``: what the desktop
-    stores as ``session`` and what a browser exports as ``web``."""
-    payload = base64.urlsafe_b64encode(f'{{"type":"{kind}"}}'.encode()).rstrip(b"=").decode()
-    return f"eyJhbGciOiJIUzI1NiJ9.{payload}.sig"
-
-
-def test_a_browser_cookie_is_refused_before_the_editor_is_touched(measured, db, pool, monkeypatch):
-    """The bug this exists to stop: a web token written to state.vscdb makes Cursor
-    reject it and sign itself out. Measured against a real browser cookie.
-
-    ``record`` stubs ``vscdb.write_auth``, so asserting it was never called is the
-    proof that not one byte reached the database - the switch said no first.
-    """
+def test_a_web_cookie_is_converted_before_the_editor_is_touched(measured, db, pool, monkeypatch):
+    """The bug the old refusal stopped is now stopped by conversion instead: a web
+    cookie is exchanged for a session token, persisted, and only then does the
+    switch go on to touch the editor."""
     calls = record(monkeypatch, running=True)
-    account = first(pool)
-    pool.data()["accounts"][0]["token"] = jwt_of_type("web")
+    account, _ = pool.upsert(CursorAccount(user_id="user_1", token=jwt_of_type("web")))
+    minted = deeplogin.DeepLogin(user_id="user_1", token=jwt_of_type("session"))
+    monkeypatch.setattr(switch.deeplogin, "exchange", lambda uid, wt, **k: minted)
 
-    with pytest.raises(UPoolError, match="browser cookie"):
+    switch.use(account.id, pool)
+
+    assert pool.get(account.id).token == minted.token  # upgraded and persisted
+    # The switch ran all the way through, which it could only do once the
+    # conversion above had already succeeded.
+    assert calls == ["running", f"close({process.CLOSE_TIMEOUT})", "write_auth", "launch"]
+
+
+def test_a_failed_exchange_leaves_the_editor_untouched(measured, db, pool, monkeypatch):
+    """The load-bearing order this task exists to guarantee: a conversion that
+    cannot reach cursor.com never gets as far as asking Cursor to close."""
+    calls = record(monkeypatch, running=True)
+    account, _ = pool.upsert(CursorAccount(user_id="user_1", token=jwt_of_type("web")))
+
+    def _boom(uid, wt, **k):
+        raise UPoolError("cursor.com said no")
+
+    monkeypatch.setattr(switch.deeplogin, "exchange", _boom)
+
+    with pytest.raises(UPoolError, match="cursor.com said no"):
         switch.use(account.id, pool)
 
-    assert "write_auth" not in calls
-    assert pool.current_id() == ""
+    assert calls == []  # not even process.running() was asked
+
+
+def test_a_live_session_token_needs_no_network(measured, db, pool, monkeypatch):
+    """The common path - a hand-pasted or adopted session token - makes no call
+    to cursor.com at all."""
+    record(monkeypatch, running=False)
+    account, _ = pool.upsert(CursorAccount(user_id="user_1", token=jwt_of_type("session")))
+
+    def _forbidden(*a, **k):
+        raise AssertionError("exchange must not be called for a live session token")
+
+    monkeypatch.setattr(switch.deeplogin, "exchange", _forbidden)
+
+    switch.use(account.id, pool)  # does not raise, makes no call
+
+    assert pool.current_id() == account.id
+
+
+def test_an_expired_session_with_no_cookie_is_refused(measured, db, pool, monkeypatch):
+    """A bare session token that has expired, with no web cookie behind it, is
+    exactly the case 0.8.0's blanket ``STATUS_EXPIRED`` refusal existed for."""
+    calls = record(monkeypatch, running=True)
+    account, _ = pool.upsert(CursorAccount(user_id="user_1", token=jwt_of_type("session")))
+    pool.data()["accounts"][-1]["status"] = STATUS_EXPIRED
+
+    with pytest.raises(UPoolError, match="expired"):
+        switch.use(account.id, pool)
+
+    assert calls == []
+
+
+def test_an_expired_web_row_is_re_minted(measured, db, pool, monkeypatch):
+    """Expired no longer means refused for a row that still has a cookie: the old
+    code refused any ``KIND_WEB`` token outright, regardless of status. The new
+    one re-mints it."""
+    calls = record(monkeypatch, running=True)
+    account, _ = pool.upsert(CursorAccount(user_id="user_1", token=jwt_of_type("web")))
+    pool.data()["accounts"][-1]["status"] = STATUS_EXPIRED
+    minted = deeplogin.DeepLogin(user_id="user_1", token=jwt_of_type("session"))
+    monkeypatch.setattr(switch.deeplogin, "exchange", lambda uid, wt, **k: minted)
+
+    switch.use(account.id, pool)
+
+    assert pool.get(account.id).token == minted.token
+    assert calls == ["running", f"close({process.CLOSE_TIMEOUT})", "write_auth", "launch"]
 
 
 def test_a_session_token_is_not_mistaken_for_a_browser_cookie(measured, db, pool, monkeypatch):
@@ -419,7 +488,7 @@ def test_the_backup_holds_the_database_as_it_was_before_the_write(measured, db, 
     outcome = switch.use(account.id, pool)
 
     live = rows(db)
-    assert live["upoolTest/accessToken"] == "eyJ-first"
+    assert live["upoolTest/accessToken"] == jwt_of_type("session", "first")
     assert live["upoolTest/cachedEmail"] == "a@example.com"
     # The unowned neighbour under the same prefix stayed exactly where it was.
     assert live[NEIGHBOUR] == "free"
@@ -439,7 +508,7 @@ def test_switching_twice_moves_current_and_rewrites_only_the_owned_keys(measured
     assert CursorStore().current_id() == two.id
     assert rows(db) == {
         NEIGHBOUR: "free",
-        "upoolTest/accessToken": "eyJ-second",
+        "upoolTest/accessToken": jwt_of_type("session", "second"),
         "upoolTest/cachedEmail": "b@example.com",
     }
 

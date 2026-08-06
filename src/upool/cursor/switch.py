@@ -34,8 +34,8 @@ from dataclasses import dataclass, field
 from .. import backup, paths
 from ..adapters.base import ApplyResult
 from ..models import UPoolError
-from . import process, vscdb
-from .models import KIND_WEB, STATUS_EXPIRED, CursorAccount, token_kind
+from . import deeplogin, process, vscdb
+from .models import KIND_SESSION, KIND_WEB, STATUS_EXPIRED, CursorAccount, token_kind
 from .store import CursorStore
 
 # What the sign-in snapshot held in ``cursorAuth/cachedSignUpType``, and the prefix
@@ -75,7 +75,7 @@ def use(account_id: str, pool: CursorStore | None = None) -> SwitchOutcome:
     """
     store = pool if pool is not None else CursorStore()
     account = store.get(account_id)
-    _refuse_unswitchable(account)
+    account = _ensure_session_token(account, store)
 
     values = _auth_values(account)
     db = paths.cursor_state_db()
@@ -168,39 +168,41 @@ def _parse_profile(raw: str) -> dict[str, object]:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def _refuse_unswitchable(account: CursorAccount) -> None:
-    """Both ways an account in the pool is still not one Cursor can be signed in as.
+def _ensure_session_token(account: CursorAccount, store: CursorStore) -> CursorAccount:
+    """The account with a token Cursor will accept, minting one if it must.
 
-    An expired row is kept on purpose - it carries the email and the name, so
-    pasting a fresh cookie revives it in place - which is exactly why ``Use`` has
-    to say no to it rather than write a cookie cursor.com has already rejected.
+    Placed at the very top of :func:`use`, before the editor is asked to close,
+    because it is the one step here that reaches the network - and the module's
+    whole discipline is that everything that can fail fails before Cursor is
+    touched. A conversion that cannot reach cursor.com leaves the editor running
+    and the pool unchanged; the user retries, with nothing to undo.
 
-    A row with no token can only come from a hand-edited ``cursor.json``:
-    :meth:`CursorStore.upsert` will not create one. It is refused here because
-    writing a blank credential would not fail, it would sign the editor out.
+    Three cases, in this order:
+
+    1. A live session token is used as-is, with no network call - the common path,
+       a hand-pasted session or one adopted from the live editor.
+    2. Any cookie that can be exchanged - a stored ``web_token``, or a ``token``
+       that is itself a ``web`` cookie - is turned into a session token and
+       persisted. A dead cookie fails inside :func:`deeplogin.exchange` with
+       cursor.com's own message.
+    3. Neither - an expired bare session token with no cookie behind it, or a row
+       with no token at all - is refused. Nothing here can revive it; only a
+       fresh paste can.
     """
-    if account.status == STATUS_EXPIRED:
-        raise UPoolError(
-            f"{_label(account)}'s session has expired - paste a fresh cookie for it first."
-        )
-    if not account.token:
-        raise UPoolError(f"{_label(account)} has no session cookie stored - paste it again.")
-    if token_kind(account.token) == KIND_WEB:
-        # A browser cookie authenticates the cursor.com API - which is why the
-        # card has a name, a plan and a usage bar - but it is a ``web`` token, and
-        # writing one into state.vscdb makes the desktop reject it and sign itself
-        # out. Only a ``session`` token signs the client in, and that is the one
-        # Cursor writes when this account is signed into the app itself; U-Pool
-        # banks it the moment that happens. Refusing here is the difference between
-        # a clear no and silently logging the user out of Cursor. Turning a web
-        # cookie into a session token is possible - the deep-login exchange - but
-        # it is not built yet, so until it is, this says so rather than guessing.
-        raise UPoolError(
-            f"{_label(account)} is a browser cookie. It shows usage, but it cannot sign "
-            f"the Cursor app in - the desktop needs the session token Cursor writes when "
-            f"you sign into this account in the app itself. Sign into it once in Cursor "
-            f"and U-Pool will pick that session up automatically."
-        )
+    kind = token_kind(account.token)
+    if kind == KIND_SESSION and account.status != STATUS_EXPIRED:
+        return account
+
+    source_cookie = account.web_token or (account.token if kind == KIND_WEB else "")
+    if source_cookie:
+        # exchange validates user_id and the cookie itself and raises a clear
+        # message on either being empty, so there is no separate guard here.
+        minted = deeplogin.exchange(account.user_id, source_cookie)
+        return store.upgrade_token(account.id, minted.token)
+
+    raise UPoolError(
+        f"{_label(account)}'s session has expired - paste a fresh cookie for it first."
+    )
 
 
 def _label(account: CursorAccount) -> str:

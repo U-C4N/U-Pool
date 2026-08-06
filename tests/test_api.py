@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import sys
 import threading
@@ -39,6 +40,18 @@ def draft(**kwargs) -> dict:
 def cookie(user_id: str, token: str) -> str:
     """One ``WorkosCursorSessionToken`` line, in the shape a browser hands over."""
     return f"WorkosCursorSessionToken={user_id}%3A%3A{token}"
+
+
+def session_jwt() -> str:
+    """A token that parses as ``token_kind == "session"``.
+
+    Most tests below never call ``cursor_use`` and so never care what shape the
+    token is - an opaque ``"token-a"`` stands in fine. The ones that do call it
+    need ``switch._ensure_session_token`` to pass the token through unchanged
+    rather than route it into the (unstubbed) deep-login exchange.
+    """
+    payload = base64.urlsafe_b64encode(b'{"type":"session"}').rstrip(b"=").decode()
+    return f"eyJhbGciOiJIUzI1NiJ9.{payload}.sig"
 
 
 @pytest.fixture(autouse=True)
@@ -495,7 +508,10 @@ def test_a_signed_out_cursor_leaves_the_pool_alone():
 
 def test_cursor_use_surfaces_a_refusal_instead_of_raising():
     api = Api()
-    row = api.cursor_add(cookie("user_01AB", "token-a"))["data"]["state"]["accounts"][0]
+    # A session-kind token, so ``_ensure_session_token`` passes it through
+    # unchanged and the refusal below is the one this test is actually about
+    # (no Cursor database) rather than an unrelated "paste a fresh cookie".
+    row = api.cursor_add(cookie("user_01AB", session_jwt()))["data"]["state"]["accounts"][0]
 
     # The sandbox has no Cursor database, so the switch refuses before it touches
     # the editor - and the bridge renders that as an envelope rather than letting
