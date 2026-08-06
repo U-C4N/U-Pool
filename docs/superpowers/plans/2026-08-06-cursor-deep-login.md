@@ -739,7 +739,6 @@ from .models import (
     KIND_WEB,
     STATUS_EXPIRED,
     CursorAccount,
-    cookie_header_for,
     token_kind,
 )
 from .store import CursorStore
@@ -784,9 +783,8 @@ def _ensure_session_token(account: CursorAccount, store: CursorStore) -> CursorA
 
     source_cookie = account.web_token or (account.token if kind == KIND_WEB else "")
     if source_cookie:
-        # Validates presence and spelling in one place, and raises the same clear
-        # message a missing credential gets everywhere else.
-        cookie_header_for(account.user_id, source_cookie)
+        # exchange validates user_id and the cookie itself and raises a clear
+        # message on either being empty, so there is no separate guard here.
         minted = deeplogin.exchange(account.user_id, source_cookie)
         return store.upgrade_token(account.id, minted.token)
 
@@ -795,7 +793,7 @@ def _ensure_session_token(account: CursorAccount, store: CursorStore) -> CursorA
     )
 ```
 
-(`_label` already exists at line 206-212 and stays. `cookie_header_for`'s return value is intentionally unused here - it is called for its raise-on-empty, matching how the module already leans on `cookie_header` to reject a malformed credential in one spelling.)
+(`_label` already exists at line 206-212 and stays.)
 
 - [ ] **Step 5: Run the switch tests**
 
