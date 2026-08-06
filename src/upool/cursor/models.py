@@ -83,6 +83,7 @@ _TEXT_FIELDS = (
     "email",
     "name",
     "token",
+    "web_token",
     "plan",
     "plan_status",
     "usage_unit",
@@ -100,6 +101,11 @@ class CursorAccount:
     # the whole credential, so it never leaves this process in a list response.
     user_id: str = ""
     token: str = ""
+
+    # The browser cookie this account was pasted as, kept when `token` is upgraded
+    # to a session token so the session can be re-minted when it dies ~60 days on.
+    # A `web` token pasted straight in lives here too, banked by CursorStore.upsert.
+    web_token: str = ""
 
     # Filled by /api/auth/me, absent until it answers.
     email: str = ""
@@ -128,9 +134,10 @@ class CursorAccount:
         return asdict(self)
 
     def redacted(self) -> dict[str, Any]:
-        """Same record with the cookie masked, for logs and error messages."""
+        """Same record with both cookies masked, for logs and error messages."""
         data = self.to_dict()
         data["token"] = mask_secret(self.token)
+        data["web_token"] = mask_secret(self.web_token)
         return data
 
     def summary(self, active: bool) -> dict[str, Any]:
@@ -143,6 +150,11 @@ class CursorAccount:
         """
         data = self.to_dict()
         data.pop("token", None)
+        # A second credential, handled exactly as `token` is: never sent, its
+        # presence surfaced as a boolean the card uses to decide whether an
+        # expired row can still be re-minted.
+        web_token = data.pop("web_token", None)
+        data["has_web_token"] = bool(web_token)
         # Held only to be written back into Cursor's own profile blob. Sending it
         # would put a remote image URL in front of the webview for every card, to
         # render something the card was never designed to show.
@@ -204,15 +216,20 @@ def as_counter(value: Any) -> int:
     return int(number) if number is not None else 0
 
 
-def cookie_header(account: CursorAccount) -> str:
-    """The ``Cookie:`` value for a request made as ``account``.
+def cookie_header_for(user_id: str, token: str) -> str:
+    """The ``Cookie:`` value for a request as ``user_id`` holding ``token``.
 
-    One spelling of the header, in one place: the encoding of the separator and
-    the choice of cookie name are the two things a request gets wrong silently,
-    and cursor.com answers a malformed cookie with the same 401 it answers a dead
-    one with. A missing token raises instead, because that 401 would be recorded
-    as ``expired`` and quietly bury a record that was never signed in.
+    The one spelling of the header, kept as one function so the encoding of the
+    separator and the choice of cookie name live in a single place - the two
+    things a request gets wrong silently. Takes the two halves rather than an
+    account so the deep-login exchange, which holds a ``web_token`` that is not in
+    ``account.token``, can build the same header without reaching for the record.
     """
-    if not account.user_id or not account.token:
+    if not user_id or not token:
         raise UPoolError("This account has no session cookie stored - paste it again.")
-    return f"{COOKIE_NAME}={account.user_id}{COOKIE_SEPARATOR}{account.token}"
+    return f"{COOKIE_NAME}={user_id}{COOKIE_SEPARATOR}{token}"
+
+
+def cookie_header(account: CursorAccount) -> str:
+    """The ``Cookie:`` value for a request made as ``account``."""
+    return cookie_header_for(account.user_id, account.token)

@@ -259,3 +259,21 @@ def test_the_file_is_json_u_pool_can_read_back(pool):
     assert raw["version"] == 1
     assert raw["current"] == account.id
     assert [entry["user_id"] for entry in raw["accounts"]] == ["user_01AB"]
+
+
+def test_web_token_round_trips_through_the_document():
+    account = CursorAccount(user_id="user_1", token="sess", web_token="web-cookie")
+    assert CursorAccount.from_dict(account.to_dict()).web_token == "web-cookie"
+
+
+def test_the_summary_hides_the_web_token_but_says_it_exists():
+    account = CursorAccount(user_id="user_1", token="sess", web_token="web-cookie")
+    summary = account.summary(active=False)
+    assert "web_token" not in summary
+    assert summary["has_web_token"] is True
+    assert CursorAccount(user_id="u", token="t").summary(active=False)["has_web_token"] is False
+
+
+def test_the_redacted_record_masks_the_web_token():
+    account = CursorAccount(user_id="user_1", token="sess", web_token="web-cookie-secret")
+    assert "web-cookie-secret" not in repr(account.redacted())
