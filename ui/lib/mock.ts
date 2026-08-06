@@ -340,6 +340,8 @@ const mockCursor: { current: string; busy: boolean; running: boolean; accounts: 
       status: "ok",
       last_checked: agoMinutes(4),
       added_at: agoMinutes(60 * 24 * 30),
+      // The account signed into the desktop app: a session token, so Use works.
+      token_kind: "session",
     },
     {
       id: "cursor-free",
@@ -356,6 +358,9 @@ const mockCursor: { current: string; busy: boolean; running: boolean; accounts: 
       status: "ok",
       last_checked: agoMinutes(11),
       added_at: agoMinutes(60 * 24 * 9),
+      // Pasted from a browser: a web token, so the card shows its usage but Use
+      // is disabled - writing it would sign the desktop app out.
+      token_kind: "web",
     },
     {
       // Refreshed after the cookie died, so the plan is whatever it was last
@@ -374,6 +379,7 @@ const mockCursor: { current: string; busy: boolean; running: boolean; accounts: 
       status: "expired",
       last_checked: agoMinutes(60 * 26),
       added_at: agoMinutes(60 * 24 * 120),
+      token_kind: "web",
     },
   ],
 };
@@ -763,6 +769,9 @@ export const mockApi = {
         status: "unknown",
         last_checked: 0,
         added_at: Date.now(),
+        // A pasted cookie is a browser (web) token; the real backend reads the
+        // kind off the JWT the same way.
+        token_kind: "web",
       });
       added += 1;
     }

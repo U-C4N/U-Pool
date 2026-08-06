@@ -164,9 +164,11 @@ export function CursorCard({
     ? "This account's session has expired — paste a fresh cookie for it."
     : !account.has_token
       ? "No session cookie is stored for this account."
-      : !supported
-        ? "U-Pool could not find Cursor on this machine."
-        : "";
+      : account.token_kind === "web"
+        ? "This is a browser cookie — it shows usage, but can't sign the Cursor app in. Sign into this account in Cursor and U-Pool will pick the session up."
+        : !supported
+          ? "U-Pool could not find Cursor on this machine."
+          : "";
 
   return (
     <li

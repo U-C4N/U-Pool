@@ -18,11 +18,39 @@ the token comes from none of those calls.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import uuid
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..models import UPoolError, mask_secret, now_ms
+
+# Which kind of credential a token is, read from its JWT ``type`` claim. A desktop
+# sign-in stores a ``session`` token; a cookie exported from a browser is a ``web``
+# token. Both authenticate the same cursor.com API - which is why a web cookie
+# still fills a card with a name, a plan and a usage bar - but only a session token
+# signs the desktop client in. Writing a web token into ``state.vscdb`` makes
+# Cursor reject it and sign itself out, so the kind is surfaced to keep ``Use``
+# from doing exactly that. Measured, not assumed: a browser cookie and a desktop
+# session were compared side by side, and they differ in this claim.
+KIND_SESSION = "session"
+KIND_WEB = "web"
+KIND_UNKNOWN = "unknown"
+
+
+def token_kind(token: str) -> str:
+    parts = token.split(".")
+    if len(parts) != 3:
+        return KIND_UNKNOWN
+    segment = parts[1]
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4)))
+    except (ValueError, binascii.Error):
+        return KIND_UNKNOWN
+    kind = payload.get("type") if isinstance(payload, dict) else None
+    return kind if kind in (KIND_SESSION, KIND_WEB) else KIND_UNKNOWN
 
 # What the last refresh concluded about the token. ``unknown`` is the honest
 # answer before the first call and after a network failure - a Cursor outage must
@@ -121,6 +149,9 @@ class CursorAccount:
         data.pop("avatar", None)
         data["active"] = bool(active)
         data["has_token"] = bool(self.token)
+        # Not the token, but what kind it is - the card disables Use on a browser
+        # cookie, which shows usage but cannot sign the desktop app in.
+        data["token_kind"] = token_kind(self.token)
         return data
 
     @classmethod

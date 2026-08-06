@@ -201,6 +201,43 @@ def test_an_account_with_no_cookie_is_refused(measured, db, pool, monkeypatch):
     assert calls == []
 
 
+def jwt_of_type(kind: str) -> str:
+    """A three-segment token whose payload declares ``type``: what the desktop
+    stores as ``session`` and what a browser exports as ``web``."""
+    payload = base64.urlsafe_b64encode(f'{{"type":"{kind}"}}'.encode()).rstrip(b"=").decode()
+    return f"eyJhbGciOiJIUzI1NiJ9.{payload}.sig"
+
+
+def test_a_browser_cookie_is_refused_before_the_editor_is_touched(measured, db, pool, monkeypatch):
+    """The bug this exists to stop: a web token written to state.vscdb makes Cursor
+    reject it and sign itself out. Measured against a real browser cookie.
+
+    ``record`` stubs ``vscdb.write_auth``, so asserting it was never called is the
+    proof that not one byte reached the database - the switch said no first.
+    """
+    calls = record(monkeypatch, running=True)
+    account = first(pool)
+    pool.data()["accounts"][0]["token"] = jwt_of_type("web")
+
+    with pytest.raises(UPoolError, match="browser cookie"):
+        switch.use(account.id, pool)
+
+    assert "write_auth" not in calls
+    assert pool.current_id() == ""
+
+
+def test_a_session_token_is_not_mistaken_for_a_browser_cookie(measured, db, pool, monkeypatch):
+    """The account signed into the desktop app carries a session token, and Use
+    has to keep working for it - that is the whole switch."""
+    record(monkeypatch, running=False)
+    account = first(pool)
+    pool.data()["accounts"][0]["token"] = jwt_of_type("session")
+
+    # No refusal: the switch runs through to writing and setting current.
+    switch.use(account.id, pool)
+    assert pool.current_id() == account.id
+
+
 def test_an_account_that_is_not_in_the_pool_is_refused(measured, db, pool, monkeypatch):
     calls = record(monkeypatch, running=True)
 
@@ -330,6 +367,23 @@ def test_the_avatar_never_reaches_the_ui(pool):
 
     assert "avatar" not in account.summary(active=False)
     assert account.to_dict()["avatar"] == "https://cdn/pic"
+
+
+def test_the_summary_carries_the_token_kind_not_the_token():
+    """The card disables Use on a browser cookie, so it needs the kind - but the
+    kind, never the token itself."""
+    web = CursorAccount(user_id="u", token=jwt_of_type("web"))
+    session = CursorAccount(user_id="u", token=jwt_of_type("session"))
+
+    assert web.summary(active=False)["token_kind"] == "web"
+    assert session.summary(active=False)["token_kind"] == "session"
+    assert "token" not in web.summary(active=False)
+
+
+def test_a_token_that_is_not_a_jwt_has_an_unknown_kind():
+    """An unparsable token is not called web, so Use is not blocked on a guess -
+    an adopted session or a hand-pasted one is trusted until proven otherwise."""
+    assert CursorAccount(user_id="u", token="whatever").summary(active=False)["token_kind"] == "unknown"
 
 
 def test_the_two_token_keys_hold_the_same_credential(pool):

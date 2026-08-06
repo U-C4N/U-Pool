@@ -35,7 +35,7 @@ from .. import backup, paths
 from ..adapters.base import ApplyResult
 from ..models import UPoolError
 from . import process, vscdb
-from .models import STATUS_EXPIRED, CursorAccount
+from .models import KIND_WEB, STATUS_EXPIRED, CursorAccount, token_kind
 from .store import CursorStore
 
 # What the sign-in snapshot held in ``cursorAuth/cachedSignUpType``, and the prefix
@@ -185,6 +185,22 @@ def _refuse_unswitchable(account: CursorAccount) -> None:
         )
     if not account.token:
         raise UPoolError(f"{_label(account)} has no session cookie stored - paste it again.")
+    if token_kind(account.token) == KIND_WEB:
+        # A browser cookie authenticates the cursor.com API - which is why the
+        # card has a name, a plan and a usage bar - but it is a ``web`` token, and
+        # writing one into state.vscdb makes the desktop reject it and sign itself
+        # out. Only a ``session`` token signs the client in, and that is the one
+        # Cursor writes when this account is signed into the app itself; U-Pool
+        # banks it the moment that happens. Refusing here is the difference between
+        # a clear no and silently logging the user out of Cursor. Turning a web
+        # cookie into a session token is possible - the deep-login exchange - but
+        # it is not built yet, so until it is, this says so rather than guessing.
+        raise UPoolError(
+            f"{_label(account)} is a browser cookie. It shows usage, but it cannot sign "
+            f"the Cursor app in - the desktop needs the session token Cursor writes when "
+            f"you sign into this account in the app itself. Sign into it once in Cursor "
+            f"and U-Pool will pick that session up automatically."
+        )
 
 
 def _label(account: CursorAccount) -> str:

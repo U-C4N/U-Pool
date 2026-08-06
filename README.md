@@ -50,7 +50,7 @@ Switching between Anthropic, OpenRouter, DeepSeek, Azure, xAI, and custom relays
 | **Permission switches** | Per-provider checkboxes for bypass mode, auto-accept edits, project MCP trust, Codex approvals/sandbox and live web search |
 | **Claude Desktop** | A tab, preview only — providers you add there are saved, nothing is written yet |
 | **Hermes & OpenCode** | Two more tabs with their own config writers — `config.yaml` is spliced section by section, `opencode.json` merged key by key |
-| **Cursor pool** | A sixth tab holding Cursor accounts — paste cookies in any common form, see name, email, plan and usage per account, switch with one button |
+| **Cursor pool** | A sixth tab holding Cursor accounts — paste cookies in any common form, see name, email, plan and usage per account, and switch between the ones you have signed into Cursor |
 | **CLI versions** | The header reports the installed Claude Code and Codex versions; refresh re-probes the machine |
 | **Delete all sessions** | Two red buttons in Settings that erase each CLI's transcripts and prompt history — and nothing else in those folders |
 | **In-app updates** | Settings shows a pulsing Update button when a newer release is out, downloads it and swaps itself |
@@ -136,6 +136,8 @@ The Cursor tab is a pool of accounts rather than a list of providers — a Curso
 Accounts are identified by the user id in the cookie, not by email. Re-pasting a rotated cookie for an account already in the pool refreshes its token in place and keeps its position.
 
 Every account is refreshed in the background on launch, against the same endpoints the cursor.com dashboard uses — `/api/auth/me` for name and email, `/api/auth/stripe` for the plan, `/api/usage-summary` (or the legacy `/api/usage`) for the meter. Those endpoints are undocumented and will change: a field that stops arriving renders as `—` and never breaks the switch. A rejected cookie marks the row **Expired** and disables its button; the row itself stays, so pasting a fresh cookie revives it.
+
+**What Use needs is a session token, not any cookie.** A cookie exported from a browser (`WorkosCursorSessionToken`) authenticates the cursor.com API — which is why it fills a card with a name, plan and usage — but it is a `web` token, and writing one into `state.vscdb` makes the desktop app reject it and sign itself out. The desktop needs the `session` token Cursor writes when you sign into an account in the app itself. U-Pool banks that session automatically the moment you are signed in, so the accounts you can actually switch to are the ones you have signed into Cursor at least once (or whose session token you paste directly). Use is disabled on a browser-cookie row, with a note saying so, rather than signing you out. Turning a browser cookie into a session token — Cursor's own deep-login exchange — is proven possible and planned, but not in 0.8.0.
 
 **Use** closes Cursor, backs up `state.vscdb` beside itself, writes the auth keys and starts Cursor again. If Cursor does not close within ten seconds, **nothing is written** — you may have unsaved work, and a half-applied auth record leaves an editor that can neither sign in nor sign out. There is no force kill.
 
