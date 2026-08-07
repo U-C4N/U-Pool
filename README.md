@@ -269,7 +269,7 @@ No license is declared yet, which under GitHub's terms means default copyright â
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=U-C4N/U-Pool&type=Date)](https://star-history.com/#U-C4N/U-Pool&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=U-C4N/U-Pool&type=Date)](https://www.star-history.com/#U-C4N/U-Pool&Date)
 
 ---
 
