@@ -17,9 +17,16 @@ TEST_APPROVED_KEY = r"Software\U-Pool-Tests\StartupApproved"
 # switch writes to it. Without the redirect the suite edits the developer's own shell.
 TEST_ENV_KEY = r"Software\U-Pool-Tests\Environment"
 
+# Captured at import, before any test can reach it. ``test_updater`` monkeypatches
+# ``sys.platform`` to "win32" to exercise the Windows-only gate, and because the
+# ``sandbox`` fixture asks for ``monkeypatch`` it is torn down *after* sandbox --
+# so at sandbox teardown the patch is still in place. Reading ``sys.platform``
+# there would send a Linux or macOS run into the ``winreg`` import below.
+REAL_PLATFORM = sys.platform
+
 
 def _drop_test_registry_keys() -> None:
-    if sys.platform != "win32":
+    if REAL_PLATFORM != "win32":
         return
     import winreg
 
