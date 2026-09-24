@@ -808,6 +808,7 @@ export const mockApi = {
       config: "~/.u-pool/config.json",
       backups: "~/.u-pool/backups",
       settings: "~/.u-pool/settings.json",
+      pricing: "~/.u-pool/pricing.json",
     }),
   // A fresh object per call, like the Python endpoint: React skips a state update
   // that hands it back the same reference.

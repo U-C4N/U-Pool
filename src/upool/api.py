@@ -587,6 +587,7 @@ class Api:
             "config": str(paths.config_file()),
             "backups": str(paths.backup_dir()),
             "settings": str(paths.settings_file()),
+            "pricing": str(paths.pricing_file()),
         }
 
     # --------------------------------------------------------------- preferences

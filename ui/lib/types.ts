@@ -244,6 +244,7 @@ export interface AppPaths {
   config: string;
   backups: string;
   settings: string;
+  pricing: string;
 }
 
 /** What the last refresh concluded. "unknown" is the honest answer before the first one. */

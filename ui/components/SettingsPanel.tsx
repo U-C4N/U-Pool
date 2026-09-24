@@ -1,15 +1,22 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { backend } from "@/lib/bridge";
 import type {
   AppPaths,
   AppSettings,
   CliVersions,
   EnvInfo,
+  PricingInfo,
   SessionSummary,
   UpdateStatus,
 } from "@/lib/types";
 import { DownloadIcon, FolderIcon, RefreshIcon, TrashIcon } from "./icons";
 import { Button, IconButton, Modal, Switch, cx } from "./ui";
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 /** Bytes as the shortest thing that is still honest at a glance. */
 function humanBytes(bytes: number): string {
@@ -291,6 +298,219 @@ function PathRow({ label, value, onOpen }: { label: string; value: string; onOpe
   );
 }
 
+const RATE_KINDS = ["input", "output", "cache_read", "cache_write"] as const;
+type RateKind = (typeof RATE_KINDS)[number];
+const RATE_KIND_LABEL: Record<RateKind, string> = {
+  input: "Input",
+  output: "Output",
+  cache_read: "Cache read",
+  cache_write: "Cache write",
+};
+
+/** What the user typed, kept as text so a cell can be empty rather than 0. */
+type PricingDraft = Record<string, Partial<Record<RateKind, string>>>;
+
+/** Only the kinds a model actually has an override for become draft text - an
+ * untouched cell stays empty and falls back to the merged rate's placeholder. */
+function draftFromOverrides(overrides: Record<string, Record<string, number>>): PricingDraft {
+  const draft: PricingDraft = {};
+  for (const [model, rates] of Object.entries(overrides)) {
+    const row: Partial<Record<RateKind, string>> = {};
+    for (const kind of RATE_KINDS) {
+      if (rates[kind] !== undefined) row[kind] = String(rates[kind]);
+    }
+    draft[model] = row;
+  }
+  return draft;
+}
+
+/** The merged/built-in rate shown as a placeholder - whole numbers stay whole. */
+function formatRate(value: number | undefined): string {
+  if (value === undefined) return "";
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function PricingRateInput({
+  value,
+  placeholder,
+  onChange,
+}: {
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <input
+      type="number"
+      inputMode="decimal"
+      step="0.01"
+      min="0"
+      value={value}
+      placeholder={placeholder}
+      onChange={(event) => onChange(event.target.value)}
+      className={cx(
+        "h-8 w-full rounded-[8px] bg-white/55 px-2 text-right text-[12px] tabular-nums text-[var(--color-label)]",
+        "placeholder:text-[var(--color-tertiary-label)] hover:bg-white/70",
+        "focus:bg-white/90 focus:outline-none focus:shadow-[0_0_0_2.5px_rgba(0,122,255,0.16),0_0_0_1px_rgba(0,122,255,0.4)]",
+      )}
+    />
+  );
+}
+
+/**
+ * The per-model price table. Self-contained rather than lifted into the page
+ * component - like `UsagePanel`, it reads and writes the bridge on its own and
+ * only needs a path to open and a place to put the file.
+ */
+function PricingSection({ pricingPath, onOpen }: { pricingPath: string; onOpen: (path: string) => void }) {
+  const [pricing, setPricing] = useState<PricingInfo | null>(null);
+  const [draft, setDraft] = useState<PricingDraft>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    backend
+      .getPricing()
+      .then((info) => {
+        if (cancelled) return;
+        setPricing(info);
+        setDraft(draftFromOverrides(info.overrides));
+      })
+      .catch((error) => !cancelled && setLoadError(message(error)));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleCellChange = (model: string, kind: RateKind, value: string) => {
+    setDraft((prev) => ({ ...prev, [model]: { ...prev[model], [kind]: value } }));
+    setSaveError(null);
+  };
+
+  // Rebuilds the whole overrides object from the draft rather than diffing
+  // against the last save - `set_pricing` replaces pricing.json wholesale, so
+  // an untouched override has to survive by staying in the draft, and a
+  // cleared cell has to drop out of it, on every save.
+  const handleSave = () => {
+    const payload: Record<string, Record<string, number>> = {};
+    for (const [model, rates] of Object.entries(draft)) {
+      const kinds: Record<string, number> = {};
+      for (const kind of RATE_KINDS) {
+        const raw = (rates[kind] ?? "").trim();
+        if (raw === "") continue;
+        const num = Number(raw);
+        if (!Number.isFinite(num) || num < 0) {
+          setSaveError(`${model} ${RATE_KIND_LABEL[kind]}: enter a rate of 0 or more, or leave it empty.`);
+          return;
+        }
+        kinds[kind] = num;
+      }
+      if (Object.keys(kinds).length > 0) payload[model] = kinds;
+    }
+    setSaving(true);
+    setSaveError(null);
+    backend
+      .setPricing(payload)
+      .then((info) => {
+        setPricing(info);
+        setDraft(draftFromOverrides(info.overrides));
+      })
+      .catch((error) => setSaveError(message(error)))
+      .finally(() => setSaving(false));
+  };
+
+  const models = pricing ? Object.keys(pricing.merged) : [];
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Pricing</p>
+        <Button
+          className="h-7 px-2.5 text-[11px]"
+          disabled={!pricingPath}
+          onClick={() => onOpen(pricingPath)}
+        >
+          <FolderIcon className="h-3.5 w-3.5" />
+          Open file
+        </Button>
+      </div>
+      <p className="text-[11px] leading-relaxed text-zinc-400">
+        $ per 1,000,000 tokens, used to price the Usage tab. Faint numbers are U-Pool's built-in
+        rates; type over one to override it, or clear a cell to fall back to the built-in rate.
+      </p>
+
+      {loadError ? (
+        <p className="rounded-[8px] bg-red-500/[0.07] px-2.5 py-2 text-[11px] leading-relaxed text-red-700">
+          {loadError}
+        </p>
+      ) : !pricing ? (
+        <p className="text-xs text-zinc-400">Loading...</p>
+      ) : (
+        <>
+          <div className="overflow-x-auto rounded-[10px] bg-[var(--color-fill)] px-3 py-2.5">
+            <table className="w-full min-w-[440px] border-collapse text-[12px]">
+              <thead>
+                <tr>
+                  <th
+                    scope="col"
+                    className="pb-1.5 pr-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.04em] text-[var(--color-tertiary-label)]"
+                  >
+                    Model
+                  </th>
+                  {RATE_KINDS.map((kind) => (
+                    <th
+                      key={kind}
+                      scope="col"
+                      className="pb-1.5 pl-2 text-right text-[10.5px] font-semibold uppercase tracking-[0.04em] text-[var(--color-tertiary-label)]"
+                    >
+                      {RATE_KIND_LABEL[kind]}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {models.map((model) => (
+                  <tr key={model} className="border-t border-[var(--color-separator)] first:border-0">
+                    <td
+                      className="max-w-[140px] truncate py-1.5 pr-2 font-mono text-[11.5px] text-[var(--color-label)]"
+                      title={model}
+                    >
+                      {model}
+                    </td>
+                    {RATE_KINDS.map((kind) => (
+                      <td key={kind} className="py-1.5 pl-2">
+                        <PricingRateInput
+                          value={draft[model]?.[kind] ?? ""}
+                          placeholder={formatRate(pricing.merged[model]?.[kind])}
+                          onChange={(value) => handleCellChange(model, kind, value)}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {saveError ? (
+            <p className="rounded-[8px] bg-red-500/[0.07] px-2.5 py-2 text-[11px] leading-relaxed text-red-700">
+              {saveError}
+            </p>
+          ) : null}
+
+          <div className="flex justify-end">
+            <Button variant="primary" className="h-8 px-3 text-xs" disabled={saving} onClick={handleSave}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function SettingsPanel({
   version,
   platform,
@@ -495,6 +715,8 @@ export function SettingsPanel({
             <p className="text-xs text-zinc-400">Loading...</p>
           )}
         </div>
+
+        {paths ? <PricingSection pricingPath={paths.pricing} onOpen={onOpen} /> : null}
 
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Cursor</p>
