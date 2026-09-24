@@ -105,7 +105,10 @@ function compareRows(a: UsageRow, b: UsageRow, key: RowSortKey, grouping: Groupi
     case "name":
       return rowName(a, grouping).localeCompare(rowName(b, grouping));
     case "cost":
-      return (a.cost ?? -Infinity) - (b.cost ?? -Infinity);
+      if (a.cost === null && b.cost === null) return 0;
+      if (a.cost === null) return -1;
+      if (b.cost === null) return 1;
+      return a.cost - b.cost;
     case "input":
       return a.input - b.input;
     case "output":
