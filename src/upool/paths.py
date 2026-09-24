@@ -16,6 +16,8 @@ SETTINGS_FILE_NAME = "settings.json"
 ENV_OWNED_FILE_NAME = "env-owned.json"
 CODEX_LOGIN_FILE_NAME = "codex-login.json"
 CURSOR_ACCOUNTS_FILE_NAME = "cursor.json"
+USAGE_FILE_NAME = "usage.json"
+PRICING_FILE_NAME = "pricing.json"
 BACKUP_DIR_NAME = "backups"
 UPDATE_DIR_NAME = "update"
 
@@ -232,6 +234,17 @@ def cursor_accounts_file() -> Path:
     state that is not a provider record gets its own file.
     """
     return app_home() / CURSOR_ACCOUNTS_FILE_NAME
+
+
+def usage_file() -> Path:
+    """The token-and-cost snapshot. Under app_home() so a session purge, which
+    only reaches ~/.claude and ~/.codex, can never delete the history."""
+    return app_home() / USAGE_FILE_NAME
+
+
+def pricing_file() -> Path:
+    """User overrides for the per-model price table."""
+    return app_home() / PRICING_FILE_NAME
 
 
 def bundle_root() -> Path:

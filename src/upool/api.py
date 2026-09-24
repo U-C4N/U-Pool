@@ -29,6 +29,7 @@ from typing import Any, Callable
 from . import (
     __version__,
     adapters,
+    atomicio,
     autostart,
     clis,
     health,
@@ -47,6 +48,8 @@ from .cursor.models import CursorAccount
 from .cursor.store import CursorStore
 from .models import Provider, UPoolError, as_bool, mask_secret
 from .store import Store
+from .usage import pricing
+from .usage import service as usage_service
 
 # One version string for the package, the window title bar and the UI badge.
 APP_VERSION = __version__
@@ -279,8 +282,33 @@ class Api:
         a file the running CLI still holds open - shows as what is left rather than
         as a success followed by a stale count.
         """
+        # Bank the usage totals before the purge deletes the transcripts they are
+        # computed from - the one coupling between the two subsystems (spec §4).
+        usage_service.refresh(app)
         outcome = sessions.purge(app)
         return outcome | {"summary": sessions.summary(app)}
+
+    # ------------------------------------------------------------------ usage
+
+    @endpoint
+    def usage_summary(self, range_key: str = "30d") -> dict[str, Any]:
+        return usage_service.summary(range_key)
+
+    @endpoint
+    def usage_refresh(self, range_key: str = "30d") -> dict[str, Any]:
+        usage_service.refresh()
+        return usage_service.summary(range_key)
+
+    @endpoint
+    def get_pricing(self) -> dict[str, Any]:
+        p = pricing.Pricing.load()
+        return {"builtin": pricing.BUILTIN, "merged": p.merged(), "overrides": p.overrides()}
+
+    @endpoint
+    def set_pricing(self, overrides: dict[str, Any]) -> dict[str, Any]:
+        atomicio.write_json(paths.pricing_file(), overrides)
+        p = pricing.Pricing.load()
+        return {"builtin": pricing.BUILTIN, "merged": p.merged(), "overrides": p.overrides()}
 
     # ----------------------------------------------------------------- cursor
     #

@@ -19,8 +19,7 @@ SNAPSHOT_VERSION = 1
 
 
 def _usage_path():
-    # Task 7 replaces this body with ``return paths.usage_file()``.
-    return paths.app_home() / "usage.json"
+    return paths.usage_file()
 
 
 @dataclass

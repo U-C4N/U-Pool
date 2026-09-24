@@ -26,8 +26,7 @@ BUILTIN: dict[str, dict[str, float]] = {
 
 
 def _pricing_path():
-    # Task 7 replaces this body with ``return paths.pricing_file()``.
-    return paths.app_home() / "pricing.json"
+    return paths.pricing_file()
 
 
 @dataclass
