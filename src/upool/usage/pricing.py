@@ -1,4 +1,3 @@
-# src/upool/usage/pricing.py
 """What a token costs, which is the one figure the transcripts do not record.
 
 The built-in numbers are dated and copied from each vendor's public pricing page;
@@ -14,10 +13,9 @@ from dataclasses import dataclass, field
 
 from .. import atomicio, paths
 
-# $ per 1,000,000 tokens, by kind. Filled from vendor pricing on 2026-09-24.
-# NOTE for the implementer: confirm each number against the vendor page at
-# implementation time and update this date. The models here are the ones the
-# development machine actually logged plus the current first-party tiers.
+# $ per 1,000,000 tokens, by kind, as indicative first-party rates on
+# 2026-09-24. Vendor prices drift, so pricing.json overlays these per model
+# and per kind - the panel never depends on a number here being current.
 BUILTIN: dict[str, dict[str, float]] = {
     "claude-opus-5":   {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_write": 18.75},
     "claude-sonnet-5": {"input": 3.0,  "output": 15.0, "cache_read": 0.3, "cache_write": 3.75},
