@@ -199,7 +199,7 @@ const mockUpdate: UpdateStatus = {
   verified: "",
   skipped_version: "",
   last_check: Math.floor(Date.now() / 1000),
-  current_version: "0.8.0-mock",
+  current_version: "0.9.0-mock",
   installed_from: "",
   install_failed: "",
   busy: false,
@@ -703,7 +703,7 @@ const find = (app: AppId, id: string) => db[app].providers.find((p) => p.id === 
 export const mockApi = {
   bootstrap: () =>
     ok<Bootstrap>({
-      version: "0.8.0-mock",
+      version: "0.9.0-mock",
       platform: "browser",
       apps: [
         { id: "claude", label: "Claude Code" },

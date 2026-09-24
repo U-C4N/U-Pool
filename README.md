@@ -10,7 +10,7 @@ Python backend · Next.js UI · native OS webview — no Electron, no Node at ru
   <a href="https://github.com/U-C4N/U-Pool/stargazers"><img src="https://img.shields.io/github/stars/U-C4N/U-Pool?style=for-the-badge&logo=github&color=007aff" alt="Stars" /></a>
   <a href="https://github.com/U-C4N/U-Pool/network/members"><img src="https://img.shields.io/github/forks/U-C4N/U-Pool?style=for-the-badge&logo=github&color=0a84ff" alt="Forks" /></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+" />
-  <a href="https://github.com/U-C4N/U-Pool/releases/latest"><img src="https://img.shields.io/badge/version-0.8.0-informational?style=for-the-badge" alt="Version 0.8.0" /></a>
+  <a href="https://github.com/U-C4N/U-Pool/releases/latest"><img src="https://img.shields.io/badge/version-0.9.0-informational?style=for-the-badge" alt="Version 0.9.0" /></a>
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@ Python backend · Next.js UI · native OS webview — no Electron, no Node at ru
   <sub>The 0.8.0 Cursor pool — six tabs, one account in use, one browser-cookie row with Use disabled, one expired.</sub>
 </p>
 
-**Download:** grab `U-Pool-0.8.0-win64.zip` from the [latest release](https://github.com/U-C4N/U-Pool/releases/latest), unzip it somewhere you own (**not** `Program Files` — Windows will not let the app replace itself there on update) and run `U-Pool.exe`. It updates itself from then on. Building from source is [below](#quick-start).
+**Download:** grab `U-Pool-0.9.0-win64.zip` from the [latest release](https://github.com/U-C4N/U-Pool/releases/latest), unzip it somewhere you own (**not** `Program Files` — Windows will not let the app replace itself there on update) and run `U-Pool.exe`. It updates itself from then on. Building from source is [below](#quick-start).
 
 **Platforms:** the app, every config-file write and the Cursor pool are cross-platform. Three integrations are Windows-only — the `HKCU\Environment` writes, launch at sign-in, and the in-app updater — and say so where they appear.
 
@@ -37,13 +37,16 @@ Python backend · Next.js UI · native OS webview — no Electron, no Node at ru
 
 Switching between Anthropic, OpenRouter, DeepSeek, Azure, xAI, a Cursor account and custom relays usually means editing config files — and, on Windows, environment variables — by hand. U-Pool turns that into a desktop app: one list per tool, one click to make an account live, and a health check that measures latency without spending a token. Every write is surgical (it changes only the keys U-Pool owns) and atomic (temp file + `os.replace`), with a copy left beside every file it touches.
 
+One idea was considered and dropped: turning a Claude or ChatGPT *subscription* cookie into a local proxy that looks like a paid API ("sub2api"). That breaks the vendors' terms and the manage-what-you-own premise this whole app is built on, so it isn't here — the official-API presets below cover the same need with a real API key instead.
+
 ## Features
 
-The four that are the whole point:
+The five that are the whole point:
 
 - **Surgical writes** — a switch changes only the keys U-Pool owns. Plugins, marketplaces, themes, hooks, MCP servers and per-project trust in `settings.json` / `config.toml` stay exactly where they are.
 - **Windows environment** — the CLIs also read their endpoint and key straight out of `HKCU\Environment`, so a switch writes there too and broadcasts the change; only names U-Pool set are ever removed.
 - **Cursor pool** — a sixth tab holding Cursor accounts: paste cookies in any common form, see each account's name, email, plan and usage, and switch between the ones you have signed into Cursor. ([details](#the-cursor-pool))
+- **Usage** — a seventh tab, read-only: totals tokens and a rough cost per day, model and project for Claude Code and Codex, read straight from their own transcripts. The snapshot lives under `~/.u-pool`, so a session purge can't erase the history it already has. Built-in prices are indicative and editable in **Settings → Pricing** (a `pricing.json` overlay); an unpriced model still shows its tokens, with a `—` for cost.
 - **Reachability probe** — a plain `GET` at the provider's models endpoint. Latency only, no completions, no token cost.
 
 <details>
@@ -78,7 +81,7 @@ The four that are the whole point:
 
 | | |
 | --- | --- |
-| Presets | Curated templates per tool — CodeFast, Yunwu, DeepSeek, Kimi, OpenRouter, MiniMax, Z.ai, Azure, xAI, Custom and more (each tool has its own catalogue) |
+| Presets | Curated templates per tool — the official first-party APIs (Anthropic, OpenAI, Gemini, Groq, Mistral, Together, Fireworks, Venice), plus CodeFast, Yunwu, DeepSeek, Kimi, OpenRouter, MiniMax, Z.ai, Azure, xAI, Custom and more (each tool has its own catalogue) |
 | Official mode | Hand control back to the vendor login by clearing everything U-Pool manages |
 | Permission switches | Per-provider checkboxes: bypass mode, skip-dangerous prompt, auto-accept edits, project MCP trust, Codex approvals/sandbox, live web search |
 
@@ -110,6 +113,8 @@ The four that are the whole point:
 | Cursor | `%APPDATA%\Cursor\...\state.vscdb` | eight named `cursorAuth/*` + `glass.lastSignedInAuthId` rows, and nothing else in the database |
 
 Hermes, OpenCode and Cursor read their credentials from their own files, so none of them writes to `HKCU\Environment`.
+
+Usage does not appear in that table because it is a reader, not a writer: it parses Claude Code's and Codex's own transcript files to build its snapshot, but never opens their `settings.json` or `config.toml`, and touches no `HKCU` key. The only file it writes is its own `~/.u-pool/usage.json`.
 
 <details>
 <summary>What a switch leaves alone</summary>
