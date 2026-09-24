@@ -59,6 +59,6 @@ def test_summary_prices_and_shapes(tmp_path, monkeypatch):
     _claude(home, "C--p-alpha", "s.jsonl", _cl_line(1_000_000, 0) + "\n")
     service.refresh(tz=TZ)
     out = service.summary("all", tz=TZ)
-    assert out["tiles"]["claude"]["tokens"] >= 1_000_000
-    assert out["tiles"]["claude"]["cost"] is not None   # claude-opus-5 is priced
+    assert out["tiles"]["claude"]["all_time"]["tokens"] >= 1_000_000
+    assert out["tiles"]["claude"]["all_time"]["cost"] is not None   # claude-opus-5 is priced
     assert any(row["model"] == "claude-opus-5" for row in out["by_model"])

@@ -106,11 +106,11 @@ def summary(range_key: str = "30d", tz: tzinfo | None = None) -> dict:
         tokens = sum(counts.values())
         cost = pricing.cost(key.model, counts)
         # Tiles: this-month and all-time, per app, regardless of the range filter.
-        # The tile itself carries the all-time totals at its top level, with the
-        # current month's slice nested under "this_month" - both are always
-        # reported, independent of the range_key the caller asked summary() for.
+        # Both are nested slots of the same shape ({tokens, cost}), so the tile is
+        # symmetric - each is always reported, independent of the range_key the
+        # caller asked summary() for.
         tile = tiles.setdefault(key.app, _tile())
-        _tile_add(tile, tokens, cost)
+        _tile_add(tile["all_time"], tokens, cost)
         if key.date.startswith(month):
             _tile_add(tile["this_month"], tokens, cost)
         # Everything below respects the range filter.
@@ -132,7 +132,7 @@ def summary(range_key: str = "30d", tz: tzinfo | None = None) -> dict:
 
 
 def _tile() -> dict:
-    return {"tokens": 0, "cost": None, "this_month": {"tokens": 0, "cost": None}}
+    return {"this_month": {"tokens": 0, "cost": None}, "all_time": {"tokens": 0, "cost": None}}
 
 
 def _tile_add(slot: dict, tokens: int, cost: float | None) -> None:
