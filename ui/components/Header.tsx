@@ -28,6 +28,10 @@ const TAB_MARK: Record<TabId, React.ComponentType<{ className?: string }>> = {
   hermes: HermesLogo,
   opencode: OpenCodeLogo,
   cursor: CursorLogo,
+  // Placeholder glyph - Task 9 wires the Usage tab itself into the tab bar and
+  // should swap this for a dedicated mark. It exists only so this map stays
+  // exhaustive over `TabId` now that the union includes "usage".
+  usage: PulseIcon,
 };
 
 /** The OpenAI mark is black in its own right; the Anthropic ones take the clay. */
@@ -38,6 +42,8 @@ const TAB_TINT: Record<TabId, string> = {
   hermes: "text-[#7C3AED]",
   opencode: "text-zinc-900",
   cursor: "text-zinc-900",
+  // Same placeholder rationale as TAB_MARK.usage above.
+  usage: "text-emerald-600",
 };
 
 /** Not an `AppInfo`: no backend hands this one out, because Cursor is not an app. */

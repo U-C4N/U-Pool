@@ -13,11 +13,13 @@ import type {
   CursorUseResult,
   EnvInfo,
   HealthResult,
+  PricingInfo,
   ProviderDetail,
   SessionPurge,
   SessionSummary,
   SwitchResult,
   UpdateStatus,
+  UsageSummary,
 } from "./types";
 
 /** Uniform response envelope produced by every Python endpoint. */
@@ -123,5 +125,10 @@ export const backend = {
   // while `busy` - the same arrangement `cliVersions` uses.
   cursorRefresh: (id = "") => call<CursorState>("cursor_refresh", id),
   cursorUse: (id: string) => call<CursorUseResult>("cursor_use", id),
+  usageSummary: (range: string) => call<UsageSummary>("usage_summary", range),
+  usageRefresh: (range: string) => call<UsageSummary>("usage_refresh", range),
+  getPricing: () => call<PricingInfo>("get_pricing"),
+  setPricing: (overrides: Record<string, Record<string, number>>) =>
+    call<PricingInfo>("set_pricing", overrides),
   quit: () => call<boolean>("quit"),
 };

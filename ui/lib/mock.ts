@@ -19,12 +19,14 @@ import type {
   CursorUseResult,
   EnvInfo,
   HealthResult,
+  PricingInfo,
   ProviderDetail,
   ReleaseInfo,
   SessionPurge,
   SessionSummary,
   SwitchResult,
   UpdateStatus,
+  UsageSummary,
 } from "./types";
 
 type Envelope<T> = { ok: boolean; data?: T; error?: string };
@@ -543,6 +545,142 @@ function cursorState(): CursorState {
   };
 }
 
+// Mirrors `pricing.BUILTIN` in `src/upool/usage/pricing.py` ($ per 1,000,000
+// tokens, by kind) closely enough that the panel's numbers look plausible in
+// browser preview - it is not read by anything real.
+const PRICING_BUILTIN: Record<string, Record<string, number>> = {
+  "claude-opus-5": { input: 15.0, output: 75.0, cache_read: 1.5, cache_write: 18.75 },
+  "claude-sonnet-5": { input: 3.0, output: 15.0, cache_read: 0.3, cache_write: 3.75 },
+  "claude-haiku": { input: 1.0, output: 5.0, cache_read: 0.1, cache_write: 1.25 },
+  "gpt-6": { input: 2.5, output: 10.0, cache_read: 0.25, cache_write: 3.125 },
+  codex: { input: 2.5, output: 10.0, cache_read: 0.25, cache_write: 3.125 },
+};
+
+// A standing override, so the pricing panel opens with one row already
+// customized rather than an all-default table.
+const mockPricingOverrides: Record<string, Record<string, number>> = {
+  codex: { input: 2.0 },
+};
+
+function copyRates(table: Record<string, Record<string, number>>): Record<string, Record<string, number>> {
+  const copy: Record<string, Record<string, number>> = {};
+  for (const [model, rates] of Object.entries(table)) copy[model] = { ...rates };
+  return copy;
+}
+
+function mergedPricing(): Record<string, Record<string, number>> {
+  const merged = copyRates(PRICING_BUILTIN);
+  for (const [model, rates] of Object.entries(mockPricingOverrides)) {
+    merged[model] = { ...(merged[model] ?? {}), ...rates };
+  }
+  return merged;
+}
+
+// A fresh copy every time, like the real endpoint's `dict` returns - `overrides`
+// in particular is our actual mutable state, and handing it out by reference
+// would let a caller mutate the mock's pricing store without going through
+// `set_pricing`.
+function pricingInfo(): PricingInfo {
+  return {
+    builtin: copyRates(PRICING_BUILTIN),
+    merged: mergedPricing(),
+    overrides: copyRates(mockPricingOverrides),
+  };
+}
+
+/**
+ * A fixed two-app snapshot: Claude's `claude-sonnet-5` usage is priced, Codex's
+ * usage sits under an unpriced `custom-relay-model` so `cost` comes back null
+ * for that row and its tile slot - the one shape the panel most needs to prove
+ * it never coerces to 0. Tokens and cost figures foot to each other by hand the
+ * same way the backend derives a tile from its rows, so a static UI can display
+ * them without doing that arithmetic itself.
+ */
+function buildUsageSummary(): UsageSummary {
+  return {
+    as_of: new Date().toISOString(),
+    tiles: {
+      claude: {
+        this_month: { tokens: 4_490_000, cost: 10.1025 },
+        all_time: { tokens: 21_760_000, cost: 48.62 },
+      },
+      codex: {
+        this_month: { tokens: 2_670_000, cost: null },
+        all_time: { tokens: 9_150_000, cost: null },
+      },
+    },
+    series: [
+      { date: "2026-09-20", claude: 2.1, codex: 0, tokens: 1_400_000 },
+      { date: "2026-09-21", claude: 1.8, codex: 0, tokens: 1_400_000 },
+      { date: "2026-09-22", claude: 2.4, codex: 0, tokens: 1_500_000 },
+      { date: "2026-09-23", claude: 1.9, codex: 0, tokens: 1_350_000 },
+      { date: "2026-09-24", claude: 1.9025, codex: 0, tokens: 1_510_000 },
+    ],
+    by_model: [
+      {
+        app: "claude",
+        model: "claude-sonnet-5",
+        input: 1_200_000,
+        output: 340_000,
+        cache_read: 2_800_000,
+        cache_write: 150_000,
+        tokens: 4_490_000,
+        cost: 10.1025,
+      },
+      {
+        app: "codex",
+        model: "custom-relay-model",
+        input: 900_000,
+        output: 210_000,
+        cache_read: 1_500_000,
+        cache_write: 60_000,
+        tokens: 2_670_000,
+        cost: null,
+      },
+    ],
+    by_project: [
+      {
+        app: "claude",
+        project: "U-Pool",
+        input: 1_200_000,
+        output: 340_000,
+        cache_read: 2_800_000,
+        cache_write: 150_000,
+        tokens: 4_490_000,
+        cost: 10.1025,
+      },
+      {
+        app: "codex",
+        project: "sandbox-tools",
+        input: 900_000,
+        output: 210_000,
+        cache_read: 1_500_000,
+        cache_write: 60_000,
+        tokens: 2_670_000,
+        cost: null,
+      },
+    ],
+  };
+}
+
+const mockUsage: UsageSummary = buildUsageSummary();
+
+/** A refresh advances the month-to-date the way a real rescan would find new activity. */
+function advanceUsage(): void {
+  mockUsage.as_of = new Date().toISOString();
+  mockUsage.tiles.claude.this_month.tokens += 18_000;
+  mockUsage.tiles.claude.this_month.cost = Number(
+    ((mockUsage.tiles.claude.this_month.cost ?? 0) + 0.04).toFixed(6),
+  );
+  mockUsage.tiles.claude.all_time.tokens += 18_000;
+  mockUsage.tiles.claude.all_time.cost = Number(
+    ((mockUsage.tiles.claude.all_time.cost ?? 0) + 0.04).toFixed(6),
+  );
+  const today = mockUsage.series[mockUsage.series.length - 1];
+  today.claude = Number((today.claude + 0.04).toFixed(6));
+  today.tokens += 18_000;
+}
+
 function state(app: AppId): AppState {
   const slot = db[app];
   return {
@@ -837,6 +975,19 @@ export const mockApi = {
       closed_cursor: wasRunning,
       relaunched: true,
     });
+  },
+  // The mock does not filter by range_key or persist a scan - it is one fixed
+  // snapshot, advanced by usage_refresh, so the panel has numbers to render.
+  usage_summary: () => ok<UsageSummary>({ ...mockUsage, tiles: { ...mockUsage.tiles } }),
+  usage_refresh: () => {
+    advanceUsage();
+    return ok<UsageSummary>({ ...mockUsage, tiles: { ...mockUsage.tiles } });
+  },
+  get_pricing: () => ok<PricingInfo>(pricingInfo()),
+  set_pricing: (overrides: Record<string, Record<string, number>>) => {
+    for (const key of Object.keys(mockPricingOverrides)) delete mockPricingOverrides[key];
+    Object.assign(mockPricingOverrides, overrides);
+    return ok<PricingInfo>(pricingInfo());
   },
   quit: () => ok(true),
 };

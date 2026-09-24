@@ -10,7 +10,7 @@ export type AppId = "claude" | "claude_desktop" | "codex" | "hermes" | "opencode
  * file it never writes and presets it cannot have. The union widens here so
  * those maps do not have to.
  */
-export type TabId = AppId | "cursor";
+export type TabId = AppId | "cursor" | "usage";
 
 export type AuthStyle = "auth_token" | "api_key";
 export type WireApi = "responses" | "chat";
@@ -326,4 +326,60 @@ export interface CursorUseResult {
   warnings: string[];
   closed_cursor: boolean;
   relaunched: boolean;
+}
+
+/**
+ * One tile's worth of a range. `cost` is null when no pricing entry matches the
+ * tokens counted for it - never coerced to 0, since that would understate spend
+ * rather than admit it is unknown. Renders as an em dash.
+ */
+export interface UsageTileSlot {
+  tokens: number;
+  cost: number | null;
+}
+
+/** A tile is always both ranges at once, so switching the header's range never refetches. */
+export interface UsageTile {
+  this_month: UsageTileSlot;
+  all_time: UsageTileSlot;
+}
+
+/** One day on the trend chart. `tokens` is the combined total, `claude`/`codex` the per-app split. */
+export interface UsageSeriesPoint {
+  date: string;
+  claude: number;
+  codex: number;
+  tokens: number;
+}
+
+/** One row of the breakdown table, grouped by model or by project depending on which list it is in. */
+export interface UsageRow {
+  app: string;
+  model?: string;
+  project?: string;
+  input: number;
+  output: number;
+  cache_read: number;
+  cache_write: number;
+  tokens: number;
+  cost: number | null;
+}
+
+export interface UsageSummary {
+  as_of: string;
+  tiles: Record<string, UsageTile>;
+  series: UsageSeriesPoint[];
+  by_model: UsageRow[];
+  by_project: UsageRow[];
+}
+
+/**
+ * `builtin` is U-Pool's shipped price table, `overrides` what the user typed in,
+ * and `merged` is what usage math actually runs against - `builtin` with any
+ * `overrides` layered on top, computed once on the backend rather than twice.
+ */
+export interface PricingInfo {
+  builtin: Record<string, Record<string, number>>;
+  merged: Record<string, Record<string, number>>;
+  overrides: Record<string, Record<string, number>>;
 }

@@ -127,8 +127,9 @@ export default function Page() {
 
   const selectTab = useCallback((next: TabId) => {
     setTab(next);
-    // Cursor leaves `app` where it was, for the reason given at its declaration.
-    if (next !== "cursor") setApp(next);
+    // Cursor and Usage both leave `app` where it was: neither is a provider app,
+    // so there is nothing for `app` to point at while either tab is active.
+    if (next !== "cursor" && next !== "usage") setApp(next);
     setView({ mode: "list" });
   }, []);
 
