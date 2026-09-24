@@ -9,14 +9,14 @@ history outlives a purge.
 
 from __future__ import annotations
 
-from datetime import datetime, tzinfo
+from datetime import datetime, timedelta, tzinfo
 from pathlib import Path
 from typing import Iterator
 
 from .. import paths
 from ..models import APP_CLAUDE, APP_CODEX
 from . import parse_claude, parse_codex, store
-from .models import KINDS, BucketKey, Totals, merge_totals
+from .models import KINDS, merge_totals
 from .pricing import Pricing
 
 
@@ -68,7 +68,7 @@ def refresh(app: str | None = None, tz: tzinfo | None = None) -> store.Snapshot:
     for key in list(snap.files):
         in_scope = (app is None) or (
             (app == APP_CLAUDE and (paths.claude_dir() / "projects") == Path(key).parent.parent)
-            or (app == APP_CODEX and "sessions" in Path(key).parts)
+            or (app == APP_CODEX and (paths.codex_dir() / "sessions") in Path(key).parents)
         )
         if in_scope and key not in seen:
             del snap.files[key]
@@ -85,7 +85,6 @@ def _cutoff(range_key: str, tz: tzinfo) -> str:
     if range_key == "all":
         return ""
     days = {"7d": 7, "30d": 30}.get(range_key, 30)
-    from datetime import timedelta
     return (datetime.now(tz) - timedelta(days=days)).strftime("%Y-%m-%d")
 
 

@@ -36,10 +36,19 @@ class Pricing:
 
     @classmethod
     def load(cls) -> "Pricing":
-        overrides = atomicio.read_json(_pricing_path(), default={}) or {}
+        try:
+            overrides = atomicio.read_json(_pricing_path(), default={}) or {}
+        except ValueError:
+            overrides = {}
+        if not isinstance(overrides, dict):
+            overrides = {}
         table: dict[str, dict[str, float]] = {k: dict(v) for k, v in BUILTIN.items()}
         for model, rates in overrides.items():
-            table.setdefault(model, {}).update(rates)
+            if not isinstance(rates, dict):
+                continue
+            clean = {k: v for k, v in rates.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+            if clean:
+                table.setdefault(model, {}).update(clean)
         return cls(table=table, _overrides=overrides)
 
     def rates(self, model: str) -> dict[str, float]:

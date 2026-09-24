@@ -45,7 +45,7 @@ def parse_file(path: Path, mark: FileMark | None, tz: tzinfo) -> tuple[dict[Buck
 
     buckets: dict[BucketKey, Totals] = {}
     skipped = 0
-    for raw in text.splitlines():
+    for raw in text.split("\n"):
         raw = raw.strip()
         if not raw:
             continue

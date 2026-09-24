@@ -52,6 +52,20 @@ def test_in_session_model_change_splits_buckets(tmp_path):
     assert by_model["gpt-6-astra"].input == 20
 
 
+def test_empty_last_token_usage_produces_no_bucket(tmp_path):
+    f = tmp_path / "r.jsonl"
+    empty_tokens = json.dumps({"type": "event_msg", "payload": {"type": "token_count",
+                               "info": {"last_token_usage": {}}}})
+    f.write_text("\n".join([
+        _meta("C:\\work\\beta"),
+        _turn("gpt-6-astra"),
+        empty_tokens,
+    ]) + "\n", encoding="utf-8")
+    buckets, _, skipped = parse_codex.parse_file(f, None, TZ)
+    assert buckets == {}
+    assert skipped == 0
+
+
 def test_carry_preserves_model_across_a_resume(tmp_path):
     f = tmp_path / "r.jsonl"
     f.write_text("\n".join([_meta("C:\\work\\beta"), _turn("gpt-6-astra")]) + "\n", encoding="utf-8")

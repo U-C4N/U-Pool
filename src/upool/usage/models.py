@@ -9,7 +9,7 @@ which may sit in a chunk already consumed by an earlier pass.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 KINDS = ("input", "output", "cache_read", "cache_write")
 

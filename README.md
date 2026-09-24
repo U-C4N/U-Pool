@@ -2,7 +2,7 @@
 
 **One place for every AI-coding endpoint, key and model — switch the active account with a click.**
 
-Claude Code, Claude Desktop, Codex, Hermes, OpenCode and now a pool of Cursor accounts, each in its own tab. For anyone who runs more than one endpoint against these tools and is tired of hand-editing `settings.json`, `config.toml` and the Windows environment to move between them.
+Claude Code, Claude Desktop, Codex, Hermes, OpenCode and now a pool of Cursor accounts, each in its own tab, plus a read-only Usage tab tracking tokens and cost across them. For anyone who runs more than one endpoint against these tools and is tired of hand-editing `settings.json`, `config.toml` and the Windows environment to move between them.
 
 Python backend · Next.js UI · native OS webview — no Electron, no Node at runtime.
 

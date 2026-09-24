@@ -42,3 +42,23 @@ def test_load_without_override_file_is_just_builtin(tmp_path, monkeypatch):
     (tmp_path / "home").mkdir(exist_ok=True)
     p = Pricing.load()
     assert p.rates("claude-opus-5") == BUILTIN["claude-opus-5"]
+
+
+def test_malformed_pricing_file_does_not_raise_and_falls_back_to_builtin(tmp_path, monkeypatch):
+    monkeypatch.setenv("UPOOL_HOME", str(tmp_path / "state"))
+    monkeypatch.setenv("UPOOL_FAKE_HOME", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir(exist_ok=True)
+    paths.pricing_file().parent.mkdir(parents=True, exist_ok=True)
+    paths.pricing_file().write_text("{not valid json", encoding="utf-8")
+    p = Pricing.load()
+    assert p.rates("claude-opus-5") == BUILTIN["claude-opus-5"]
+
+
+def test_load_skips_non_dict_entry_and_drops_non_numeric_rates(tmp_path, monkeypatch):
+    monkeypatch.setenv("UPOOL_HOME", str(tmp_path / "state"))
+    monkeypatch.setenv("UPOOL_FAKE_HOME", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir(exist_ok=True)
+    atomicio.write_json(paths.pricing_file(), {"badmodel": "nope", "okmodel": {"input": "x", "output": 2.0}})
+    p = Pricing.load()
+    assert p.rates("okmodel") == {"output": 2.0}
+    assert p.rates("badmodel") == {}

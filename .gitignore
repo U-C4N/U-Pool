@@ -7,6 +7,7 @@ venv/
 .pytest_cache/
 # The suite needs an explicit --basetemp; this is the one the docs suggest.
 .pytest-tmp/
+.pytmp/
 .ruff_cache/
 
 # PyInstaller
