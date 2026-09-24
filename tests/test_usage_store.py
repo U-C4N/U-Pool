@@ -40,3 +40,23 @@ def test_malformed_snapshot_does_not_raise(tmp_path, monkeypatch):
     (paths.app_home()).mkdir(parents=True, exist_ok=True)
     (paths.app_home() / "usage.json").write_text("{ not json", encoding="utf-8")
     assert store.load().buckets == {}
+
+
+def test_malformed_entry_is_skipped_not_raised(tmp_path, monkeypatch):
+    _sandbox(tmp_path, monkeypatch)
+    atomicio.write_json(paths.app_home() / "usage.json", {
+        "version": 1,
+        "buckets": [
+            {"app": "claude", "date": "2026-09-01", "model": "m", "project": "p", "messages": 1, "input": 10},
+            {"app": "claude", "date": "2026-09-01", "project": "p"},  # missing "model"
+        ],
+        "files": {
+            "/good.jsonl": {"size": 5, "mtime": 1.0, "offset": 5, "carry": "c"},
+            "/bad.jsonl": {"size": 5, "mtime": 1.0},  # missing "offset"
+        },
+    })
+    snap = store.load()
+    assert snap.buckets[BucketKey("claude", "2026-09-01", "m", "p")].input == 10
+    assert len(snap.buckets) == 1
+    assert snap.files["/good.jsonl"].offset == 5
+    assert "/bad.jsonl" not in snap.files

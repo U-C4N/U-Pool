@@ -37,15 +37,23 @@ def load() -> Snapshot:
     if not isinstance(raw, dict) or raw.get("version") != SNAPSHOT_VERSION:
         return Snapshot()
     snap = Snapshot()
+    # A single hand-edited or truncated entry must not sink the rest of a file
+    # that otherwise passed the version gate above - drop it, keep going.
     for row in raw.get("buckets", []):
-        key = BucketKey(row["app"], row["date"], row["model"], row["project"])
+        try:
+            key = BucketKey(row["app"], row["date"], row["model"], row["project"])
+        except (KeyError, TypeError):
+            continue
         t = Totals(messages=row.get("messages", 0))
         for kind in KINDS:
             setattr(t, kind, row.get(kind, 0))
         snap.buckets[key] = t
     for path, mark in (raw.get("files") or {}).items():
-        snap.files[path] = FileMark(size=mark["size"], mtime=mark["mtime"],
-                                    offset=mark["offset"], carry=mark.get("carry", ""))
+        try:
+            snap.files[path] = FileMark(size=mark["size"], mtime=mark["mtime"],
+                                        offset=mark["offset"], carry=mark.get("carry", ""))
+        except (KeyError, TypeError):
+            continue
     return snap
 
 
