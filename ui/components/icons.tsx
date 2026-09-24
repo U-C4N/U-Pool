@@ -215,6 +215,16 @@ export const EllipsisIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Usage tab — three ascending bars on a baseline (SF: chart.bar.fill). */
+export const ChartBarIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3.5 20.5h17" />
+    <path d="M6.5 20.5v-5" />
+    <path d="M12 20.5v-9" />
+    <path d="M17.5 20.5v-13" />
+  </Svg>
+);
+
 /** Choose a file — a page with a folded corner. */
 export const FileIcon = (p: IconProps) => (
   <Svg {...p}>

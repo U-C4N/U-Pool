@@ -3,6 +3,7 @@
 import type { AppInfo, CliVersions, TabId } from "@/lib/types";
 import { CursorLogo, HermesLogo, OpenAILogo, OpenCodeLogo } from "./BrandMarks";
 import {
+  ChartBarIcon,
   ClaudeDesktopGlyph,
   ClaudeGlyph,
   FolderIcon,
@@ -28,10 +29,7 @@ const TAB_MARK: Record<TabId, React.ComponentType<{ className?: string }>> = {
   hermes: HermesLogo,
   opencode: OpenCodeLogo,
   cursor: CursorLogo,
-  // Placeholder glyph - Task 9 wires the Usage tab itself into the tab bar and
-  // should swap this for a dedicated mark. It exists only so this map stays
-  // exhaustive over `TabId` now that the union includes "usage".
-  usage: PulseIcon,
+  usage: ChartBarIcon,
 };
 
 /** The OpenAI mark is black in its own right; the Anthropic ones take the clay. */
@@ -42,12 +40,14 @@ const TAB_TINT: Record<TabId, string> = {
   hermes: "text-[#7C3AED]",
   opencode: "text-zinc-900",
   cursor: "text-zinc-900",
-  // Same placeholder rationale as TAB_MARK.usage above.
-  usage: "text-emerald-600",
+  // The app's own accent blue - Usage is U-Pool's own view, not a vendor's,
+  // so it takes the brand color rather than a provider's mark color.
+  usage: "text-brand-600",
 };
 
-/** Not an `AppInfo`: no backend hands this one out, because Cursor is not an app. */
+/** Neither is an `AppInfo`: no backend hands these out, because Cursor is not an app and Usage is not a provider. */
 const CURSOR_TAB = { id: "cursor" as const, label: "Cursor" };
+const USAGE_TAB = { id: "usage" as const, label: "Usage" };
 
 /**
  * One installed CLI, as a short mono pill.
@@ -117,14 +117,17 @@ export function Header({
   updateAvailable?: boolean;
 }) {
   const probing = Boolean(clis?.busy);
-  // Cursor keeps its own Add and Refresh inside the tab, and it has no provider
-  // to test, so the three provider actions go dim rather than acting on whichever
-  // app the user was looking at before.
+  // Cursor keeps its own Add and Refresh inside the tab, and Usage has nothing
+  // to add or test at all, so the three provider actions go dim on either
+  // rather than acting on whichever provider app the user was looking at before.
   const onCursor = activeTab === "cursor";
+  const onUsage = activeTab === "usage";
+  const notProvider = onCursor || onUsage;
   // Appended here rather than coming back from `bootstrap`: the backend's app
   // list is the five provider apps and Cursor is not one of them. It waits for
   // that list so a lone Cursor tab is never the whole bar on first paint.
-  const tabs: { id: TabId; label: string }[] = apps.length > 0 ? [...apps, CURSOR_TAB] : [];
+  const tabs: { id: TabId; label: string }[] =
+    apps.length > 0 ? [...apps, CURSOR_TAB, USAGE_TAB] : [];
   return (
     /**
      * Two rows, not one. Five app tabs came to roughly 660px on their own - the
@@ -160,9 +163,9 @@ export function Header({
             <RefreshIcon className={cx("h-[18px] w-[18px]", probing && "animate-spin")} />
           </IconButton>
           <IconButton
-            label={onCursor ? "Health checks are for provider tabs" : "Test every provider"}
+            label={notProvider ? "Health checks are for provider tabs" : "Test every provider"}
             onClick={onTestAll}
-            disabled={testing || onCursor}
+            disabled={testing || notProvider}
           >
             <PulseIcon className={cx("h-[18px] w-[18px]", testing && "animate-pulse")} />
           </IconButton>
@@ -170,12 +173,14 @@ export function Header({
             label={
               onCursor
                 ? "Cursor's files are listed in Settings"
-                : canOpenFolder
-                  ? "Open config folder"
-                  : "This app has no config file yet"
+                : onUsage
+                  ? "Usage has no config file of its own"
+                  : canOpenFolder
+                    ? "Open config folder"
+                    : "This app has no config file yet"
             }
             onClick={onOpenFolder}
-            disabled={!canOpenFolder || onCursor}
+            disabled={!canOpenFolder || notProvider}
           >
             <FolderIcon className="h-[18px] w-[18px]" />
           </IconButton>
@@ -196,9 +201,13 @@ export function Header({
           <button
             type="button"
             onClick={onAdd}
-            disabled={onCursor}
-            aria-label={onCursor ? "Cursor accounts are added inside the tab" : "Add provider"}
-            title={onCursor ? "Cursor accounts are added inside the tab" : "Add provider"}
+            disabled={notProvider}
+            aria-label={
+              onCursor ? "Cursor accounts are added inside the tab" : onUsage ? "Usage is read-only" : "Add provider"
+            }
+            title={
+              onCursor ? "Cursor accounts are added inside the tab" : onUsage ? "Usage is read-only" : "Add provider"
+            }
             className="pressable ml-1.5 grid h-8 w-8 place-items-center rounded-[10px] bg-brand-600 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-brand-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-brand-600"
           >
             <PlusIcon className="h-[18px] w-[18px]" strokeWidth={2.25} />

@@ -8,6 +8,7 @@ import { ProviderList, type RowHandlers } from "@/components/ProviderList";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { ToastStack, useToasts } from "@/components/Toast";
 import { Button, Modal } from "@/components/ui";
+import { UsagePanel } from "@/components/UsagePanel";
 import { backend, isMockBridge } from "@/lib/bridge";
 import type {
   AppId,
@@ -556,12 +557,15 @@ export default function Page() {
       ) : null}
 
       {/*
-        The Cursor tab replaces the whole provider view rather than sitting
-        inside it: it brings its own page container, its own heading and its own
-        state, because none of `AppState` describes a Cursor account.
+        The Cursor and Usage tabs replace the whole provider view rather than
+        sitting inside it: each brings its own page container, its own heading
+        and its own state, because neither Cursor accounts nor usage numbers
+        live in `AppState`.
       */}
       {tab === "cursor" ? (
         <CursorPool onToast={push} />
+      ) : tab === "usage" ? (
+        <UsagePanel onToast={push} />
       ) : view.mode === "list" ? (
         <div className="animate-fade-in mx-auto w-full max-w-[720px] px-5 py-6">
           <div className="mb-5 px-1">
