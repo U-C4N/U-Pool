@@ -18,7 +18,7 @@ Python backend · Next.js UI · native OS webview — no Electron, no Node at ru
 </p>
 
 <p align="center">
-  <sub>The 0.8.0 Cursor pool — six tabs, one account in use, one browser-cookie row with Use disabled, one expired.</sub>
+  <sub>The Cursor pool (a 0.8.0 capture) — one account in use, one browser-cookie row with Use disabled, one expired. 0.9.0 adds a seventh, read-only <b>Usage</b> tab: per-day, per-model token and cost totals for Claude Code and Codex.</sub>
 </p>
 
 **Download:** grab `U-Pool-0.9.0-win64.zip` from the [latest release](https://github.com/U-C4N/U-Pool/releases/latest), unzip it somewhere you own (**not** `Program Files` — Windows will not let the app replace itself there on update) and run `U-Pool.exe`. It updates itself from then on. Building from source is [below](#quick-start).
