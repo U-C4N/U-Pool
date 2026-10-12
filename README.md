@@ -24,7 +24,7 @@ Switch providers for Claude Code, Codex, Hermes and OpenCode, manage Cursor acco
   <sub>The 1.0.0 API workspace. Captured from the current UI's browser preview with demo accounts; no real credentials or live account activity are shown.</sub>
 </p>
 
-> **Version status:** this source tree is 1.0.0. Its [validation record](docs/v1-validation.md) still lists release gates, so the download page may offer an earlier published version. ChatGPT coding support is experimental; see [API compatibility](#api-compatibility) before connecting a client.
+> **API support in 1.0.0:** ChatGPT coding support is experimental. See [API compatibility](#api-compatibility) and the [validation record](docs/v1-validation.md) for tested behavior and outstanding live-account and clean-machine checks.
 
 ## What's new in 1.0.0
 
@@ -150,7 +150,7 @@ python scripts/build.py --skip-ui --reuse-proxy-worker
 
 Outputs: `dist/U-Pool/U-Pool.exe`, `dist/U-Pool-1.0.0-win64.zip` and `dist/SHA256SUMS.txt`. The build prepares an isolated API worker, includes license notices, and smoke-tests the executable. Browser/engine downloads use pinned versions and verified hashes.
 
-Complete the [release checks](docs/v1-validation.md#remaining-release-gates) before publishing. Attach the ZIP and checksum file to a GitHub release tagged `vX.Y.Z` for the in-app updater.
+Review the [outstanding validation](docs/v1-validation.md#outstanding-validation) and document any remaining limitations when publishing. Attach the ZIP and checksum file to a GitHub release tagged `vX.Y.Z` for the in-app updater.
 
 </details>
 
@@ -160,7 +160,7 @@ Complete the [release checks](docs/v1-validation.md#remaining-release-gates) bef
 | --- | --- |
 | [API setup and limits](docs/api-gateway.md) | Account setup, requests, client compatibility, recovery and live validation |
 | [Configuration and account switching](docs/configuration.md) | Files and registry keys, backups, Cursor behavior and per-app details |
-| [1.0.0 validation](docs/v1-validation.md) | Automated checks, packaged tests and outstanding release gates |
+| [1.0.0 validation](docs/v1-validation.md) | Automated checks, packaged tests and outstanding validation |
 | [Design notes](docs/superpowers/specs/) | Feature designs and implementation context |
 | [Third-party notices](THIRD_PARTY_LICENSES.txt) | Managed components and dependency provenance |
 

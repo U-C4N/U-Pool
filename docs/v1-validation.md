@@ -1,6 +1,6 @@
 # U-Pool 1.0.0 validation record
 
-Validated on Windows x64 on 2026-10-11. This is a release candidate: the remaining live-account and clean-machine checks below still gate the v1 release.
+Initially validated as a release candidate on Windows x64 on 2026-10-11. The checks below distinguish verified behavior from outstanding live-account and clean-machine validation; publishing the package does not complete those checks.
 
 ## Automated and packaged checks
 
@@ -15,7 +15,7 @@ Validated on Windows x64 on 2026-10-11. This is a release candidate: the remaini
 | Actual Grok device OAuth begin, pending and cancellation | Passed; no Grok sign-in performed |
 | Owned worker, motor and Chrome shutdown | Passed |
 
-The ZIP is `dist/U-Pool-1.0.0-win64.zip`. Its SHA-256 is `89baa68b3a202b1b46836f04f7660b9cc053b8f1eaa386f74bc4376896f0fe84`; `dist/SHA256SUMS.txt` records it. The packaged worker ZIP SHA-256 is `fcac967b18713345db1dcb754859c46cb1d4aa06dbfff1131174862b6197e862`.
+The original 2026-10-11 ZIP was `dist/U-Pool-1.0.0-win64.zip`. Its SHA-256 was `89baa68b3a202b1b46836f04f7660b9cc053b8f1eaa386f74bc4376896f0fe84`. The publication build below supersedes that ZIP and its checksum. The packaged worker ZIP SHA-256 is `fcac967b18713345db1dcb754859c46cb1d4aa06dbfff1131174862b6197e862`.
 
 ## Authorized real ChatGPT account checks
 
@@ -40,7 +40,7 @@ The SDK checks sent 11 top-level generation requests, with synthetic prompts and
 
 The current ChatGPT page requires waiting for the submitted conversation's canonical completed response to preserve Markdown. SSE is valid, but the content can arrive in one completed chunk. Token-by-token latency has not been established for this layout.
 
-## Remaining release gates
+## Outstanding validation
 
 - Complete actual coding-client acceptance after the provider's rate limit clears. Hermes was launched with its existing committed Python 3.14.7 environment and a generated provider entry. Its legacy Python 3.11 environment was incompatible with the installed source; no installed source, dependency or user configuration was changed. The final run used the supported three-tool bundle (`read_file`, `patch`, `terminal`), with auxiliary title generation disabled. It reached the real account but repeated 429 responses prevented a completed tool step; the test owner stopped the run and every managed process.
 - Codex CLI 0.161.0 is incompatible with the current strict gateway Responses contract. An accountless loopback capture found unconditional `client_metadata`, `prompt_cache_key`, `reasoning={}` and encrypted-reasoning `include` fields. An explicit field-adapter contract would be needed before accepting this client; model settings do not remove all fields.
@@ -57,4 +57,17 @@ Read [API setup and limits](api-gateway.md) before running the separate, opt-in 
 - README and linked guides: local file links and Git whitespace checks passed.
 - The new README screenshot was captured from the production UI export in browser preview mode with synthetic ChatGPT and Grok accounts. It shows the interface, not live account validation.
 
-This recheck does not replace the packaged checks above or complete any remaining live-account or clean-machine release gates. The desktop ZIP was not rebuilt during this documentation update.
+This source/documentation recheck did not replace the packaged checks above or complete any outstanding live-account or clean-machine validation. The desktop ZIP was not rebuilt during that documentation update; the publication build is recorded separately below.
+
+## Publication package - 2026-10-12
+
+The Windows package was rebuilt with the current production UI using `python scripts/build.py --skip-ui --reuse-proxy-worker`. The verified API worker was reused unchanged.
+
+- Desktop executable `--version` and worker `--self-test`: passed.
+- All 52 U-Pool modules embedded in the final executable match the current source.
+- Bundled UI files, worker source/hash, runtime manifest and license notices: verified.
+- ZIP integrity, archive paths and file-for-file comparison with the final bundle: passed.
+- Release asset: `U-Pool-1.0.0-win64.zip` (29,858,480 bytes).
+- Final SHA-256: `145e4fba48645abb779dbcca0b39d3a9d8c05b48b39f38b984c56c157356ffdd`; also recorded in the attached `SHA256SUMS.txt`.
+
+The outstanding validation and client compatibility limits above remain applicable to this release.
