@@ -108,6 +108,8 @@ def _assert_sandboxed(fake_home) -> None:
         # and the editor the developer has open.
         paths.cursor_state_db(),
         paths.config_file(),
+        paths.proxy_dir(),
+        paths.runtimes_dir(),
     ):
         assert str(resolved).startswith(str(fake_home.parent)), (
             f"{resolved} escaped the sandbox - it is not under {fake_home.parent}"

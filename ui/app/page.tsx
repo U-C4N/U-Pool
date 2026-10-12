@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CursorPool } from "@/components/CursorPool";
+import { ApiPool } from "@/components/ApiPool";
 import { Header } from "@/components/Header";
 import { ProviderForm } from "@/components/ProviderForm";
 import { ProviderList, type RowHandlers } from "@/components/ProviderList";
@@ -130,7 +131,7 @@ export default function Page() {
     setTab(next);
     // Cursor and Usage both leave `app` where it was: neither is a provider app,
     // so there is nothing for `app` to point at while either tab is active.
-    if (next !== "cursor" && next !== "usage") setApp(next);
+    if (next !== "cursor" && next !== "usage" && next !== "api") setApp(next);
     setView({ mode: "list" });
   }, []);
 
@@ -566,6 +567,8 @@ export default function Page() {
         <CursorPool onToast={push} />
       ) : tab === "usage" ? (
         <UsagePanel onToast={push} />
+      ) : tab === "api" ? (
+        null
       ) : view.mode === "list" ? (
         <div className="animate-fade-in mx-auto w-full max-w-[720px] px-5 py-6">
           <div className="mb-5 px-1">
@@ -603,6 +606,12 @@ export default function Page() {
           onSave={handleSave}
         />
       )}
+
+      {apps.length > 0 ? (
+        <div hidden={tab !== "api"}>
+          <ApiPool onToast={push} onConnect={apply} active={tab === "api"} />
+        </div>
+      ) : null}
 
       {pendingDelete ? (
         <Modal

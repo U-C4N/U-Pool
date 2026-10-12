@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.metadata
 import shutil
 import subprocess
 import sys
@@ -68,6 +69,10 @@ def build_app() -> None:
         str(ROOT / "src"),
         "--add-data",
         f"{UI_OUT}{separator}ui/out",
+        "--add-data",
+        f"{BUILD / 'proxy-runtimes'}{separator}proxy-runtimes",
+        "--add-data",
+        f"{ROOT / 'THIRD_PARTY_LICENSES.txt'}{separator}.",
         # PyYAML is reached only through ``upool.yamlio``, which the Hermes adapter
         # imports. Naming it means a missing bundle is a build failure rather than
         # something the first Hermes switch discovers.
@@ -80,9 +85,39 @@ def build_app() -> None:
         "unittest",
         "--exclude-module",
         "pydoc",
-        str(ROOT / "src" / "upool" / "__main__.py"),
     ]
+    if sys.platform == "win32":
+        # The Windows shell uses WinForms/WebView2. Installed development Qt
+        # packages must not change the release's dependencies or GUI selection.
+        for module in ("PyQt5", "PyQt6", "PySide2", "PySide6", "qtpy"):
+            command.extend(["--exclude-module", module])
+    command.append(str(ROOT / "src" / "upool" / "__main__.py"))
     run(command, cwd=ROOT)
+
+
+def collect_licenses() -> None:
+    """Keep original notices for the desktop's bundled Python dependencies."""
+    destination = DIST / "U-Pool" / "_internal" / "dependency-licenses"
+    destination.mkdir(parents=True, exist_ok=True)
+    dependencies = ("pywebview", "tomlkit", "PyYAML", "pythonnet", "clr_loader", "cffi",
+                    "pycparser", "proxy_tools", "bottle", "typing_extensions", "setuptools", "packaging", "pyinstaller")
+    provenance = []
+    for name in dependencies:
+        try:
+            distribution = importlib.metadata.distribution(name)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+        provenance.append(f"{name} {distribution.version}")
+        for index, relative in enumerate(distribution.files or []):
+            if not relative.name.lower().startswith(("license", "copying", "authors")):
+                continue
+            source = Path(distribution.locate_file(relative))
+            if source.is_file():
+                shutil.copyfile(source, destination / f"{name}-{index}-{source.name}")
+    python_license = Path(sys.base_prefix) / "LICENSE.txt"
+    if python_license.is_file():
+        shutil.copyfile(python_license, destination / "CPython-LICENSE.txt")
+    (destination / "BUNDLED-DEPENDENCIES.txt").write_text("\n".join(provenance) + "\n", encoding="utf-8")
 
 
 def smoke_test() -> None:
@@ -123,11 +158,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Build the U-Pool desktop bundle.")
     parser.add_argument("--skip-ui", action="store_true", help="reuse the existing ui/out export")
     parser.add_argument("--clean", action="store_true", help="remove build/ and dist/ first")
+    parser.add_argument("--reuse-proxy-worker", action="store_true", help="reuse the checksum-verified built API worker")
     args = parser.parse_args()
 
     if args.clean:
         for path in (BUILD, DIST):
-            shutil.rmtree(path, ignore_errors=True)
+            resolved = path.resolve()
+            if resolved.parent != ROOT.resolve() or resolved.name not in {"build", "dist"}:
+                raise SystemExit("Refusing to clean a path outside the project build directories.")
+            shutil.rmtree(resolved, ignore_errors=True)
 
     if args.skip_ui:
         if not (UI_OUT / "index.html").exists():
@@ -135,8 +174,13 @@ def main() -> int:
     else:
         build_ui()
 
+    prepare = [sys.executable, str(ROOT / "scripts" / "prepare_proxy_runtimes.py")]
+    if args.reuse_proxy_worker:
+        prepare.append("--reuse-worker")
+    run(prepare, cwd=ROOT)
     build_app()
     smoke_test()
+    collect_licenses()
     archive = package()
     print(f"\nDone. Bundle: {DIST / 'U-Pool'}")
     print(f"Attach {archive.name} and SHA256SUMS.txt to the release, or the updater has")

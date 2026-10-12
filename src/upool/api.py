@@ -50,6 +50,7 @@ from .models import Provider, UPoolError, as_bool, mask_secret
 from .store import Store
 from .usage import pricing
 from .usage import service as usage_service
+from .proxy.service import ProxyService
 
 # One version string for the package, the window title bar and the UI badge.
 APP_VERSION = __version__
@@ -101,6 +102,11 @@ class Api:
         self._cursor = CursorStore()
         self._cursor_lock = threading.Lock()
         self._cursor_worker: threading.Thread | None = None
+        self._proxy = ProxyService()
+        self._exit_requested = False
+        self._tray = None
+        self._shutdown_lock = threading.Lock()
+        self._shutdown_done = False
         self._adopt_live_session()
 
     def attach(self, window) -> None:
@@ -643,6 +649,93 @@ class Api:
     # ------------------------------------------------------------------ updates
 
     @endpoint
+    def proxy_state(self) -> dict[str, Any]:
+        return self._proxy.state()
+
+    @endpoint
+    def proxy_start(self) -> dict[str, Any]:
+        return self._proxy.start()
+
+    @endpoint
+    def proxy_stop(self) -> dict[str, Any]:
+        return self._proxy.stop()
+
+    @endpoint
+    def proxy_set_port(self, port: int) -> dict[str, Any]:
+        return self._proxy.set_port(port)
+
+    @endpoint
+    def proxy_api_key(self) -> dict[str, str]:
+        return {"key": self._proxy.client_key}
+
+    @endpoint
+    def proxy_install(self) -> dict[str, Any]:
+        return self._proxy.install()
+
+    @endpoint
+    def proxy_import_cookie(self, text: str, name: str = "") -> dict[str, Any]:
+        return self._proxy.import_cookie(text, name)
+
+    @endpoint
+    def proxy_login_grok(self, name: str = "") -> dict[str, Any]:
+        login = self._proxy.login_grok(name)
+        import webbrowser
+        webbrowser.open(login["url"])
+        return login
+
+    @endpoint
+    def proxy_login_status(self, account_id: str, state: str) -> dict[str, Any]:
+        return self._proxy.login_status(account_id, state)
+
+    @endpoint
+    def proxy_cancel_login(self, account_id: str, state: str) -> dict[str, Any]:
+        return self._proxy.cancel_login(account_id, state)
+
+    @endpoint
+    def proxy_update_account(self, account_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+        return self._proxy.update_account(account_id, patch)
+
+    @endpoint
+    def proxy_refresh_account(self, account_id: str) -> dict[str, Any]:
+        return self._proxy.refresh_account(account_id)
+
+    @endpoint
+    def proxy_delete_account(self, account_id: str) -> dict[str, Any]:
+        return self._proxy.delete_account(account_id)
+
+    @endpoint
+    def proxy_open_profile(self, account_id: str) -> bool:
+        self._proxy.open_profile(account_id)
+        return True
+
+    @endpoint
+    def proxy_connect(self, app: str, model: str) -> dict[str, Any]:
+        from .models import APP_CODEX, APP_HERMES, APP_OPENCODE, NPM_OPENAI, TRANSPORT_CHAT
+        if app not in (APP_CODEX, APP_HERMES, APP_OPENCODE):
+            raise UPoolError("Choose Codex, Hermes or OpenCode for this API connection.")
+        if model not in {entry["id"] for entry in self._proxy.list_models()}:
+            raise UPoolError("Choose a model available in the API pool.")
+        provider = Provider(app=app, name=f"U-Pool API - {model}",
+                            base_url=self._proxy.state()["endpoint"], api_key=self._proxy.client_key,
+                            model=model, wire_api="responses", transport=TRANSPORT_CHAT, npm=NPM_OPENAI,
+                            note="Managed local API. Start the API in U-Pool before using this profile.")
+        if app == APP_HERMES and model.startswith("chatgpt/"):
+            provider.extra["upool_proxy"] = "chatgpt"
+        saved = self.store.add(provider)
+        return {"id": saved.id, "state": self._app_state(app)}
+
+    def _shutdown(self) -> None:
+        with self._shutdown_lock:
+            if self._shutdown_done:
+                return
+            self._shutdown_done = True
+            try:
+                self._proxy.shutdown()
+            finally:
+                if self._tray is not None:
+                    self._tray.close()
+
+    @endpoint
     def update_status(self) -> dict[str, Any]:
         """Current snapshot. Polled by the UI while an update is in flight."""
         return self._updater.snapshot()
@@ -674,6 +767,10 @@ class Api:
 
     @endpoint
     def quit(self) -> bool:
-        if self._window is not None:
-            self._window.destroy()
+        self._exit_requested = True
+        try:
+            self._shutdown()
+        finally:
+            if self._window is not None:
+                self._window.destroy()
         return True

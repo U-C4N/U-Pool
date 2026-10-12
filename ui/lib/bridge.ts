@@ -15,6 +15,9 @@ import type {
   HealthResult,
   PricingInfo,
   ProviderDetail,
+  ProxyLogin,
+  ProxyLoginStatus,
+  ProxyState,
   SessionPurge,
   SessionSummary,
   SwitchResult,
@@ -125,6 +128,26 @@ export const backend = {
   // while `busy` - the same arrangement `cliVersions` uses.
   cursorRefresh: (id = "") => call<CursorState>("cursor_refresh", id),
   cursorUse: (id: string) => call<CursorUseResult>("cursor_use", id),
+  proxyState: () => call<ProxyState>("proxy_state"),
+  proxyStart: () => call<ProxyState>("proxy_start"),
+  proxyStop: () => call<ProxyState>("proxy_stop"),
+  proxySetPort: (port: number) => call<ProxyState>("proxy_set_port", port),
+  proxyApiKey: () => call<{ key: string }>("proxy_api_key"),
+  proxyInstall: () => call<ProxyState>("proxy_install"),
+  proxyImportCookie: (text: string, name: string) =>
+    call<{ account_id: string; state: ProxyState }>("proxy_import_cookie", text, name),
+  proxyLoginGrok: (name: string) => call<ProxyLogin>("proxy_login_grok", name),
+  proxyLoginStatus: (id: string, state: string) =>
+    call<ProxyLoginStatus>("proxy_login_status", id, state),
+  proxyCancelLogin: (id: string, state: string) =>
+    call<ProxyState>("proxy_cancel_login", id, state),
+  proxyUpdateAccount: (id: string, patch: { enabled?: boolean; name?: string }) =>
+    call<ProxyState>("proxy_update_account", id, patch),
+  proxyRefreshAccount: (id: string) => call<ProxyState>("proxy_refresh_account", id),
+  proxyDeleteAccount: (id: string) => call<ProxyState>("proxy_delete_account", id),
+  proxyOpenProfile: (id: string) => call<boolean>("proxy_open_profile", id),
+  proxyConnect: (app: AppId, model: string) =>
+    call<{ id: string; state: AppState }>("proxy_connect", app, model),
   usageSummary: (range: string) => call<UsageSummary>("usage_summary", range),
   usageRefresh: (range: string) => call<UsageSummary>("usage_refresh", range),
   getPricing: () => call<PricingInfo>("get_pricing"),

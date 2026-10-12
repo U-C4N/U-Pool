@@ -24,6 +24,8 @@ so ``env_namespace`` is empty and the registry is left alone.
 
 from __future__ import annotations
 
+from copy import deepcopy
+import json
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +45,23 @@ MODEL_DEFAULT_KEY = "default"
 # Which ``providers.<slug>`` entries U-Pool wrote. Everything else in the mapping
 # is the user's, and a switch must be able to tell the difference after a restart.
 PROVIDERS_CLAIM = "hermes_providers"
+PROXY_MARKER_KEY = "upool_proxy"
+MODEL_OVERRIDES_KEY = "model_overrides"
+MODEL_OVERRIDES_CLAIM = "hermes_proxy_model_overrides"
+PROXY_MODEL_CAPABILITIES = {
+    "supports_reasoning": False,
+    "supports_vision": False,
+    "supports_tools": True,
+}
+
+
+def _explicit_reasoning(value: Any) -> bool:
+    """Known Hermes effort forms that put a reasoning parameter on the wire."""
+    if isinstance(value, dict):
+        return value.get("enabled", True) is False or bool(str(value.get("effort") or "").strip())
+    return value is False or isinstance(value, str) and value.strip().lower() in {
+        "minimal", "low", "medium", "high", "xhigh", "max", "ultra", "none", "false", "disabled",
+    }
 # Keys inside a provider entry that U-Pool writes; anything else there came from
 # the ``extra`` map and is passed through untouched.
 MANAGED_ENTRY_KEYS = ("name", "api", "api_key", "default_model", "models", "transport")
@@ -97,6 +116,7 @@ class HermesAdapter(Adapter):
             MODEL_KEY: model if model else None,
             PROVIDERS_KEY: providers if providers else None,
         }
+        changes.update(self._proxy_model_overrides(data, provider, result))
         updated = yamlio.splice(text, changes)
         if updated == text and config_path.exists():
             return result
@@ -117,6 +137,83 @@ class HermesAdapter(Adapter):
                 removed.append(f"{PROVIDERS_KEY}.{slug}")
         return removed
 
+    def _proxy_model_overrides(self, data: dict[str, Any], provider: Provider,
+                               result: ApplyResult) -> dict[str, Any]:
+        """Declare missing web-session capabilities without adopting user metadata.
+
+        Hermes resolves named custom providers to the generic ``custom`` runtime.
+        Its reasoning default reads this section, not the provider entry's own
+        capabilities. Claims name individual fields; a later manual change gives
+        that field back to the user even when switching to the official provider.
+        """
+        active = (not provider.official and provider.extra.get(PROXY_MARKER_KEY) == "chatgpt"
+                  and provider.model.startswith("chatgpt/"))
+        selected_model = provider.model if active else ""
+        previous = data.get(MODEL_OVERRIDES_KEY, {})
+        if not isinstance(previous, dict):
+            claims.write(MODEL_OVERRIDES_CLAIM, [])
+            if active:
+                result.warnings.append("Hermes model_overrides is not a mapping; configure the ChatGPT model "
+                                       "to omit reasoning parameters before using this API profile.")
+            return {}
+        overrides = deepcopy(previous)
+        retained: list[str] = []
+        for name in claims.read(MODEL_OVERRIDES_CLAIM):
+            try:
+                field = json.loads(name)
+            except (TypeError, ValueError):
+                continue
+            if (not isinstance(field, list) or len(field) != 2
+                    or not all(isinstance(part, str) for part in field)):
+                continue
+            model_name, key = field
+            if key not in PROXY_MODEL_CAPABILITIES:
+                continue
+            custom = overrides.get("custom")
+            entry = custom.get(model_name) if isinstance(custom, dict) else None
+            if not isinstance(entry, dict) or entry.get(key) is not PROXY_MODEL_CAPABILITIES[key]:
+                continue
+            if model_name == selected_model:
+                retained.append(name)
+                continue
+            del entry[key]
+            result.removed.append(f"{MODEL_OVERRIDES_KEY}.custom.{model_name}.{key}")
+            if not entry:
+                custom.pop(model_name, None)
+            if not custom:
+                overrides.pop("custom", None)
+        if active:
+            custom = overrides.setdefault("custom", {})
+            entry = custom.setdefault(selected_model, {}) if isinstance(custom, dict) else None
+            if isinstance(entry, dict):
+                for key, value in PROXY_MODEL_CAPABILITIES.items():
+                    if key not in entry:
+                        entry[key] = value
+                        retained.append(json.dumps([selected_model, key], separators=(",", ":")))
+                if entry.get("supports_reasoning") is True:
+                    result.warnings.append("Hermes already marks this ChatGPT model as reasoning-capable. "
+                                           "Set supports_reasoning to false and omit reasoning parameters "
+                                           "before using this API profile; your setting was preserved.")
+            else:
+                result.warnings.append("Hermes has incompatible model_overrides for this ChatGPT model. "
+                                       "Configure it to omit reasoning parameters before using this API profile; "
+                                       "your settings were preserved.")
+            agent = data.get("agent")
+            effort = agent.get("reasoning_effort") if isinstance(agent, dict) else None
+            if effort is not None and not (isinstance(effort, str) and not effort.strip()):
+                result.warnings.append("Hermes agent.reasoning_effort is explicitly configured. "
+                                       "Clear it so reasoning parameters are omitted for this ChatGPT API profile; "
+                                       "your setting was preserved.")
+            reasoning_overrides = agent.get("reasoning_overrides") if isinstance(agent, dict) else None
+            if isinstance(reasoning_overrides, dict) and any(
+                    _explicit_reasoning(reasoning_overrides.get(name))
+                    for name in (selected_model, selected_model.split("/", 1)[1])):
+                result.warnings.append("Hermes agent.reasoning_overrides explicitly configures this ChatGPT model. "
+                                       "Clear its effort so reasoning parameters are omitted for this API profile; "
+                                       "your setting was preserved.")
+        claims.write(MODEL_OVERRIDES_CLAIM, retained)
+        return {MODEL_OVERRIDES_KEY: overrides or None} if overrides != previous else {}
+
     def _entry(self, provider: Provider, existing: Any) -> dict[str, Any]:
         """The provider entry as Hermes wants it.
 
@@ -136,7 +233,7 @@ class HermesAdapter(Adapter):
             entry["default_model"] = provider.model
             entry["models"] = {provider.model: {"name": provider.model}}
         for key, value in provider.extra.items():
-            if not key or key in MANAGED_ENTRY_KEYS:
+            if not key or key in MANAGED_ENTRY_KEYS or key == PROXY_MARKER_KEY:
                 continue
             entry[key] = value
         # An entry that was there before may carry per-model metadata Hermes wrote

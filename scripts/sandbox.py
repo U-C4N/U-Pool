@@ -66,6 +66,8 @@ def _prepare(home: Path) -> None:
         paths.hermes_config_file(),
         paths.opencode_config_file(),
         paths.cursor_state_db(),
+        paths.proxy_dir(),
+        paths.runtimes_dir(),
     ):
         if not str(resolved).startswith(str(home)):
             raise SystemExit(f"[sandbox] {resolved} escaped the sandbox - refusing to run")

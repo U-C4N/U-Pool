@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "platform": "windows-amd64",
+  "components": [
+    {
+      "id": "cliproxyapi",
+      "version": "8.0.23",
+      "url": "https://github.com/router-for-me/CLIProxyAPI/releases/download/v8.0.23/CLIProxyAPI_8.0.23_windows_amd64.zip",
+      "sha256": "d2839470df9a3698c9b0a93a6f42f8c569be4a0f74099f7110ba9350f62ca6f7",
+      "executable": "cli-proxy-api.exe",
+      "license": "MIT"
+    },
+    {
+      "id": "chrome",
+      "version": "155.0.8059.39",
+      "url": "https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.39/win64/chrome-win64.zip",
+      "sha256": "59ab2a6e99bde9c0bc180414988394f9f5355a0d3764c704151ee8ecea235c7e",
+      "executable": "chrome-win64/chrome.exe",
+      "license": "Google Chrome terms and included Chromium notices"
+    }
+  ],
+  "worker": {
+    "id": "chatgpt-worker",
+    "version": "1.0.0",
+    "source_url": "https://codeload.github.com/Octo-Lex/ChatGPT-Web2API/zip/497527dceabfa3f95961e23c291e618c5570f1ac",
+    "source_sha256": "0fd4fc6ba77af695fd8a3c3d35631935d8c59e88238420bda5a0754b18ba9582",
+    "source_commit": "497527dceabfa3f95961e23c291e618c5570f1ac",
+    "license": "MIT",
+    "executable": "upool-chatgpt-worker/upool-chatgpt-worker.exe"
+  }
+}

@@ -21,6 +21,8 @@ import type {
   HealthResult,
   PricingInfo,
   ProviderDetail,
+  ProxyAccount,
+  ProxyState,
   ReleaseInfo,
   SessionPurge,
   SessionSummary,
@@ -170,13 +172,13 @@ const mockSettings: AppSettings = {
 };
 
 const mockRelease: ReleaseInfo = {
-  tag: "v0.9.0",
-  version: "0.9.0",
+  tag: "v1.0.1",
+  version: "1.0.1",
   notes: "Pretend release notes for the browser preview.",
   html_url: "https://github.com/U-C4N/U-Pool/releases/latest",
   published_at: "2026-08-01T00:00:00Z",
-  asset_name: "U-Pool-0.9.0-win64.zip",
-  asset_url: "https://github.com/U-C4N/U-Pool/releases/download/v0.9.0/U-Pool-0.9.0-win64.zip",
+  asset_name: "U-Pool-1.0.1-win64.zip",
+  asset_url: "https://github.com/U-C4N/U-Pool/releases/download/v1.0.1/U-Pool-1.0.1-win64.zip",
   asset_size: 48 * 1024 * 1024,
   asset_sha256: "0".repeat(64),
   checksums_url: "",
@@ -199,7 +201,7 @@ const mockUpdate: UpdateStatus = {
   verified: "",
   skipped_version: "",
   last_check: Math.floor(Date.now() / 1000),
-  current_version: "0.9.0-mock",
+  current_version: "1.0.0-mock",
   installed_from: "",
   install_failed: "",
   busy: false,
@@ -700,10 +702,41 @@ function state(app: AppId): AppState {
 
 const find = (app: AppId, id: string) => db[app].providers.find((p) => p.id === id);
 
+const mockProxy: ProxyState = {
+  running: false, endpoint: "http://127.0.0.1:8318/v1", port: 8318, has_key: false,
+  accounts: [],
+  runtimes: [
+    { id: "cliproxyapi", version: "8.0.23", installed: false, status: "Not installed", error: "" },
+    { id: "chrome", version: "155.0.8059.39", installed: false, status: "Not installed", error: "" },
+    { id: "chatgpt_worker", version: "1.0.0", installed: false, status: "Not installed", error: "" },
+  ],
+  stats: { requests: 0, errors: 0, avg_latency_ms: null, input_tokens: null, output_tokens: null },
+  busy: false, supported: true,
+};
+let mockProxyInstallDone = 0;
+let mockProxyAccountSequence = 0;
+const mockProxyLogins = new Map<string, { nonce: string; readyAt: number }>();
+
+function proxyState(): ProxyState {
+  if (mockProxy.busy && Date.now() >= mockProxyInstallDone) {
+    mockProxy.busy = false;
+    mockProxy.runtimes.forEach((runtime) => { runtime.installed = true; runtime.status = "Installed"; });
+  }
+  return structuredClone(mockProxy);
+}
+
+function proxyAccount(provider: ProxyAccount["provider"], name: string): ProxyAccount {
+  return {
+    id: `preview-${provider}-${++mockProxyAccountSequence}`, provider, name, email: "",
+    enabled: true, status: "ready", models: [provider === "chatgpt" ? "auto" : "grok-4"],
+    last_checked: Date.now(), cooldown_until: 0, error: "",
+  };
+}
+
 export const mockApi = {
   bootstrap: () =>
     ok<Bootstrap>({
-      version: "0.9.0-mock",
+      version: "1.0.0-mock",
       platform: "browser",
       apps: [
         { id: "claude", label: "Claude Code" },
@@ -722,6 +755,7 @@ export const mockApi = {
       settings: mockSettings,
       update: { ...mockUpdate },
       clis: { ...mockClis, tools: mockClis.tools.map((tool) => ({ ...tool })) },
+      proxy: proxyState(),
     }),
   list_providers: (app: AppId) => ok(state(app)),
   get_provider: (app: AppId, id: string) => {
@@ -990,5 +1024,93 @@ export const mockApi = {
     Object.assign(mockPricingOverrides, overrides);
     return ok<PricingInfo>(pricingInfo());
   },
-  quit: () => ok(true),
+  proxy_state: () => ok(proxyState()),
+  proxy_start: () => {
+    if (!mockProxy.runtimes.every((runtime) => runtime.installed)) return fail("Install the managed components first.");
+    mockProxy.running = true;
+    mockProxy.has_key = true;
+    return ok(proxyState());
+  },
+  proxy_stop: () => { mockProxy.running = false; return ok(proxyState()); },
+  proxy_set_port: (port: number) => {
+    if (mockProxy.running) return fail("Stop the API before changing its port.");
+    if (!Number.isInteger(port) || port < 1024 || port > 65535) return fail("Enter a port from 1024 to 65535.");
+    mockProxy.port = port;
+    mockProxy.endpoint = `http://127.0.0.1:${port}/v1`;
+    return ok(proxyState());
+  },
+  proxy_api_key: () => mockProxy.has_key ? ok({ key: "upool-preview-key-not-a-real-credential" }) : fail("Start the gateway to create its API key."),
+  proxy_install: () => {
+    mockProxy.busy = true;
+    mockProxyInstallDone = Date.now() + 2200;
+    mockProxy.runtimes.forEach((runtime) => { runtime.status = "Installing"; });
+    return ok(proxyState());
+  },
+  proxy_import_cookie: (text: string, name: string) => {
+    if (!mockProxy.runtimes.every((runtime) => runtime.installed)) return fail("Install the managed components first.");
+    if (!text.trim()) return fail("The cookie export is empty.");
+    const existing = mockProxy.accounts.find((account) => account.provider === "chatgpt" && account.name === (name.trim() || "Preview ChatGPT"));
+    const account = existing || proxyAccount("chatgpt", name.trim() || "Preview ChatGPT");
+    account.last_checked = Date.now();
+    account.status = "ready";
+    if (!existing) mockProxy.accounts.push(account);
+    return ok({ account_id: account.id, state: proxyState() });
+  },
+  proxy_login_grok: (name: string) => {
+    if (!mockProxy.runtimes.every((runtime) => runtime.installed)) return fail("Install the managed components first.");
+    const account = proxyAccount("grok", name.trim() || "Preview Grok");
+    account.status = "verifying";
+    account.models = [];
+    mockProxy.accounts.push(account);
+    const nonce = `preview-login-${account.id}`;
+    mockProxyLogins.set(account.id, { nonce, readyAt: Date.now() + 5000 });
+    return ok({ account_id: account.id, state: nonce, url: "https://example.com/grok-device-preview", user_code: "DEMO-CODE" });
+  },
+  proxy_login_status: (id: string, nonce: string) => {
+    const login = mockProxyLogins.get(id);
+    if (!login || login.nonce !== nonce) return fail("The sign-in session is no longer valid.");
+    if (Date.now() < login.readyAt) return ok({ status: "pending", state: proxyState() });
+    const account = mockProxy.accounts.find((row) => row.id === id);
+    if (!account) return fail("The account no longer exists.");
+    account.status = "ready";
+    account.models = ["grok-4"];
+    account.last_checked = Date.now();
+    mockProxyLogins.delete(id);
+    return ok({ status: "ok", state: proxyState() });
+  },
+  proxy_cancel_login: (id: string, nonce: string) => {
+    const login = mockProxyLogins.get(id);
+    if (login && login.nonce !== nonce) return fail("The sign-in session is no longer valid.");
+    mockProxyLogins.delete(id);
+    mockProxy.accounts = mockProxy.accounts.filter((account) => account.id !== id);
+    return ok(proxyState());
+  },
+  proxy_update_account: (id: string, patch: { enabled?: boolean; name?: string }) => {
+    const account = mockProxy.accounts.find((row) => row.id === id);
+    if (!account) return fail("The account no longer exists.");
+    Object.assign(account, patch);
+    return ok(proxyState());
+  },
+  proxy_refresh_account: (id: string) => {
+    const account = mockProxy.accounts.find((row) => row.id === id);
+    if (!account) return fail("The account no longer exists.");
+    account.last_checked = Date.now();
+    return ok(proxyState());
+  },
+  proxy_delete_account: (id: string) => {
+    mockProxyLogins.delete(id);
+    mockProxy.accounts = mockProxy.accounts.filter((account) => account.id !== id);
+    return ok(proxyState());
+  },
+  proxy_open_profile: (id: string) => mockProxy.accounts.some((account) => account.id === id && account.provider === "chatgpt") ? ok(true) : fail("This account has no browser profile."),
+  proxy_connect: (app: AppId, model: string) => {
+    if (!["codex", "hermes", "opencode"].includes(app)) return fail("Choose Codex, Hermes or OpenCode.");
+    mockProxy.has_key = true;
+    const id = `proxy-${app}-${model.replace(/\W+/g, "-")}`;
+    const provider = find(app, id) || seed(app, `U-Pool ${model}`, mockProxy.endpoint);
+    Object.assign(provider, { id, base_url: mockProxy.endpoint, model, api_key: "upool-preview-key-not-a-real-credential", wire_api: "responses", transport: "chat_completions", npm: "@ai-sdk/openai-compatible" });
+    if (!find(app, id)) db[app].providers.push(provider);
+    return ok({ id, state: state(app) });
+  },
+  quit: () => { mockProxy.running = false; return ok(true); },
 };

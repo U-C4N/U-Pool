@@ -6,7 +6,8 @@ venv/
 *.egg-info/
 .pytest_cache/
 # The suite needs an explicit --basetemp; this is the one the docs suggest.
-.pytest-tmp/
+.pytest-tmp*/
+.test-tmp*/
 .pytmp/
 .ruff_cache/
 

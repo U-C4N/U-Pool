@@ -30,6 +30,7 @@ const TAB_MARK: Record<TabId, React.ComponentType<{ className?: string }>> = {
   opencode: OpenCodeLogo,
   cursor: CursorLogo,
   usage: ChartBarIcon,
+  api: PulseIcon,
 };
 
 /** The OpenAI mark is black in its own right; the Anthropic ones take the clay. */
@@ -43,11 +44,13 @@ const TAB_TINT: Record<TabId, string> = {
   // The app's own accent blue - Usage is U-Pool's own view, not a vendor's,
   // so it takes the brand color rather than a provider's mark color.
   usage: "text-brand-600",
+  api: "text-brand-600",
 };
 
 /** Neither is an `AppInfo`: no backend hands these out, because Cursor is not an app and Usage is not a provider. */
 const CURSOR_TAB = { id: "cursor" as const, label: "Cursor" };
 const USAGE_TAB = { id: "usage" as const, label: "Usage" };
+const API_TAB = { id: "api" as const, label: "API" };
 
 /**
  * One installed CLI, as a short mono pill.
@@ -122,12 +125,13 @@ export function Header({
   // rather than acting on whichever provider app the user was looking at before.
   const onCursor = activeTab === "cursor";
   const onUsage = activeTab === "usage";
-  const notProvider = onCursor || onUsage;
+  const onApi = activeTab === "api";
+  const notProvider = onCursor || onUsage || onApi;
   // Appended here rather than coming back from `bootstrap`: the backend's app
   // list is the five provider apps and Cursor is not one of them. It waits for
   // that list so a lone Cursor tab is never the whole bar on first paint.
   const tabs: { id: TabId; label: string }[] =
-    apps.length > 0 ? [...apps, CURSOR_TAB, USAGE_TAB] : [];
+    apps.length > 0 ? [...apps, CURSOR_TAB, API_TAB, USAGE_TAB] : [];
   return (
     /**
      * Two rows, not one. Five app tabs came to roughly 660px on their own - the
@@ -173,7 +177,9 @@ export function Header({
             label={
               onCursor
                 ? "Cursor's files are listed in Settings"
-                : onUsage
+                : onApi
+                  ? "API accounts are managed inside the tab"
+                  : onUsage
                   ? "Usage has no config file of its own"
                   : canOpenFolder
                     ? "Open config folder"
@@ -203,10 +209,10 @@ export function Header({
             onClick={onAdd}
             disabled={notProvider}
             aria-label={
-              onCursor ? "Cursor accounts are added inside the tab" : onUsage ? "Usage is read-only" : "Add provider"
+              onCursor ? "Cursor accounts are added inside the tab" : onApi ? "API accounts are added inside the tab" : onUsage ? "Usage is read-only" : "Add provider"
             }
             title={
-              onCursor ? "Cursor accounts are added inside the tab" : onUsage ? "Usage is read-only" : "Add provider"
+              onCursor ? "Cursor accounts are added inside the tab" : onApi ? "API accounts are added inside the tab" : onUsage ? "Usage is read-only" : "Add provider"
             }
             className="pressable ml-1.5 grid h-8 w-8 place-items-center rounded-[10px] bg-brand-600 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] hover:bg-brand-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-brand-600"
           >
@@ -215,10 +221,10 @@ export function Header({
         </div>
       </div>
 
-      <div className="flex justify-center px-5 pb-2">
+      <div className="flex overflow-x-auto px-5 pb-2">
         <nav
           aria-label="Target application"
-          className="upool-segment relative flex shrink-0 items-center p-0.5"
+          className="upool-segment relative mx-auto flex shrink-0 items-center p-0.5"
         >
           {tabs.map((tab) => {
             const active = tab.id === activeTab;

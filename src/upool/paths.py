@@ -76,6 +76,14 @@ def settings_file() -> Path:
     return app_home() / SETTINGS_FILE_NAME
 
 
+def proxy_dir() -> Path:
+    return app_home() / "proxy"
+
+
+def runtimes_dir() -> Path:
+    return app_home() / "runtimes"
+
+
 def env_owned_file() -> Path:
     """Which environment variables U-Pool set, per namespace.
 

@@ -14,6 +14,7 @@ import sys
 from . import autostart, paths, settings
 from .api import APP_VERSION, Api
 from .server import UiServer
+from .tray import Tray
 
 WINDOW_TITLE = "U-Pool"
 DEFAULT_SIZE = (1180, 780)
@@ -62,11 +63,32 @@ def run(argv: list[str] | None = None) -> int:
     )
     api.attach(window)
 
+    def toggle_api() -> None:
+        if api._proxy.gateway.running:
+            api._proxy.stop()
+        else:
+            api._proxy.start()
+
+    tray = Tray(window.show, toggle_api, api.quit, lambda: api._proxy.gateway.running)
+    api._tray = tray
+
+    def on_closing() -> bool:
+        if tray.available and not api._exit_requested:
+            window.hide()
+            return False
+        return True
+
+    window.events.closing += on_closing
+
     try:
-        webview.start(debug=debug, private_mode=False)
+        webview.start(tray.start, debug=debug, private_mode=False)
     finally:
-        if server is not None:
-            server.stop()
+        api._exit_requested = True
+        try:
+            api._shutdown()
+        finally:
+            if server is not None:
+                server.stop()
     return 0
 
 

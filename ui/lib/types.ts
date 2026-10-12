@@ -10,7 +10,7 @@ export type AppId = "claude" | "claude_desktop" | "codex" | "hermes" | "opencode
  * file it never writes and presets it cannot have. The union widens here so
  * those maps do not have to.
  */
-export type TabId = AppId | "cursor" | "usage";
+export type TabId = AppId | "cursor" | "usage" | "api";
 
 export type AuthStyle = "auth_token" | "api_key";
 export type WireApi = "responses" | "chat";
@@ -203,6 +203,61 @@ export interface Bootstrap {
   settings: AppSettings;
   update: UpdateStatus;
   clis: CliVersions;
+  proxy?: ProxyState;
+}
+
+export interface ProxyAccount {
+  id: string;
+  provider: "chatgpt" | "grok";
+  name: string;
+  email: string;
+  enabled: boolean;
+  status: string;
+  models: string[];
+  last_checked: number;
+  cooldown_until: number;
+  error: string;
+}
+
+export interface ProxyRuntime {
+  id: string;
+  version: string;
+  installed: boolean;
+  status: string;
+  error: string | null;
+}
+
+export interface ProxyState {
+  running: boolean;
+  endpoint: string;
+  port: number;
+  has_key: boolean;
+  accounts: ProxyAccount[];
+  runtimes: ProxyRuntime[];
+  stats: {
+    requests: number;
+    errors: number;
+    avg_latency_ms: number | null;
+    input_tokens: number | null;
+    output_tokens: number | null;
+  };
+  busy: boolean;
+  supported: boolean;
+  error?: string;
+}
+
+/** OAuth state is an opaque nonce, distinct from a proxy status snapshot. */
+export interface ProxyLogin {
+  account_id: string;
+  state: string;
+  url: string;
+  user_code: string;
+}
+
+export interface ProxyLoginStatus {
+  status: string;
+  state?: ProxyState;
+  error?: string;
 }
 
 export interface SwitchResult {
