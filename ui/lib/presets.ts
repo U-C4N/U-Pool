@@ -197,6 +197,22 @@ export const CODEX_PRESETS: ProviderPreset[] = [
     tint: "#10A37F",
   },
   {
+    id: "vidai",
+    name: "VidAI",
+    website:
+      "https://api.david-ai.net/register?aff=5SM2BCS7ML2H&utm_source=u_pool&utm_medium=provider_preset&utm_campaign=tool_distribution_202610&utm_content=register",
+    base_url: "https://api.david-ai.net/v1",
+    model: "gpt-5.6-luna",
+    wire_api: "responses",
+    env_key: "OPENAI_API_KEY",
+    note: "Third-party Codex Responses gateway - preset limited to the currently verified model and endpoint",
+    tint: "#00D9FF",
+    extra: {
+      model_reasoning_effort: "high",
+      disable_response_storage: "true",
+    },
+  },
+  {
     id: "gemini",
     name: "Gemini",
     website: "https://ai.google.dev",
