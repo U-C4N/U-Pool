@@ -41,6 +41,68 @@ class WorkerFailure(Exception):
 _TURN_POLL_INTERVAL = 3.0
 _PROJECTION_TIMEOUT = 5.0
 _FRESH_CHAT_TIMEOUT = 6.0
+_SESSION_TIMEOUT = 20.0
+_SESSION_PROBE = r"""(async () => {
+  if (location.origin !== 'https://chatgpt.com' || document.readyState === 'loading')
+    return JSON.stringify({status: 503});
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000);
+  try {
+    const r = await fetch('/api/auth/session', {
+      credentials: 'include', cache: 'no-store', signal: controller.signal
+    });
+    const result = {status: r.status, retry_after: r.headers.get('retry-after')};
+    if (r.ok) {
+      const s = await r.json();
+      if (!s || typeof s !== 'object' || Array.isArray(s))
+        return JSON.stringify({status: 502});
+      result.session = {token: s.accessToken || '', user: s.user?.name || '',
+                        email: s.user?.email || '', user_id: s.user?.id || ''};
+    }
+    return JSON.stringify(result);
+  } catch (_) {
+    return JSON.stringify({status: 503});
+  } finally {
+    clearTimeout(timer);
+  }
+})()"""
+
+
+async def _read_session(driver) -> dict:
+    """Distinguish a signed-out session from a page/network failure."""
+    deadline = time.monotonic() + _SESSION_TIMEOUT
+    signed_out = 0
+    failure = WorkerFailure("ChatGPT session verification is temporarily unavailable. Retry or open the managed profile.", 503)
+    while time.monotonic() < deadline:
+        try:
+            raw = await asyncio.wait_for(
+                driver._js_strict(_SESSION_PROBE, timeout=5),
+                timeout=min(5, max(0.001, deadline - time.monotonic())))
+            result = json.loads(raw) if isinstance(raw, str) else raw
+        except Exception:
+            result = None
+        status = result.get("status") if isinstance(result, dict) else None
+        session = result.get("session") if isinstance(result, dict) else None
+        if status == 403:
+            raise WorkerFailure("ChatGPT blocked session verification. Open the managed profile and complete any browser verification.", 403)
+        if status == 429:
+            raise WorkerFailure("ChatGPT session verification is rate limited. Retry later.", 429,
+                                _worker_retry_after(result.get("retry_after")))
+        if (type(status) is int and 200 <= status < 300 and isinstance(session, dict)
+                and isinstance(session.get("token"), str) and session["token"]):
+            return session
+        if status == 401 or (status == 200 and isinstance(session, dict) and not session.get("token")):
+            signed_out += 1
+            failure = WorkerFailure("ChatGPT did not accept this session. Open the managed profile and sign in.", 401)
+            if signed_out >= 3:
+                raise failure
+        else:
+            signed_out = 0
+            failure = WorkerFailure("ChatGPT session verification is temporarily unavailable. Retry or open the managed profile.", 503)
+        await asyncio.sleep(min(0.5, max(0, deadline - time.monotonic())))
+    raise failure
+
+
 _FRESH_CHAT_SNAPSHOT = r"""(() => {
   const main = document.querySelector('main, [role="main"]');
   const previous = main ? main.querySelectorAll(
@@ -379,7 +441,11 @@ def _compatible_driver_type(base):
             self._upool_projection_cache = None
 
         async def _refresh_token(self):
-            await super()._refresh_token()
+            self._last_refresh_attempt_at = time.time()
+            session = await _read_session(self)
+            self._access_token = session["token"]
+            self._user_name = session.get("user", "")
+            self._token_fetched_at = time.time()
             if not self._upool_request_active:
                 self._reset_backend_observation()
 
@@ -631,7 +697,9 @@ class BrowserWorker:
                     pass
                 if isinstance(error, asyncio.CancelledError):
                     raise
-                raise WorkerFailure("ChatGPT authentication is required. Reimport cookies or log in to the managed profile.", 401) from None
+                if isinstance(error, WorkerFailure):
+                    raise error from None
+                raise WorkerFailure("The managed browser could not connect to ChatGPT. Retry or open the managed profile.", 503) from None
 
     async def inject(self, cookies: list[dict]) -> dict:
         async with self.lock:
@@ -676,21 +744,15 @@ class BrowserWorker:
                 if not isinstance(target_id, str) or not target_id:
                     raise WorkerFailure("Could not open the managed ChatGPT profile.", 503)
                 self.driver = self._new_driver(target_id)
-            await asyncio.sleep(2)
             return await self._facts()
 
     async def _facts(self) -> dict:
         await self._ensure()
-        raw = await self.driver._js_strict(
-            "(async()=>{const r=await fetch('/api/auth/session',{credentials:'include'});"
-            "const s=await r.json();return JSON.stringify({authenticated:!!s.accessToken,"
-            "email:s.user?.email||'',name:s.user?.name||'',user_id:s.user?.id||''});})()")
-        facts = json.loads(raw) if isinstance(raw, str) else raw
-        if not isinstance(facts, dict) or not facts.get("authenticated"):
-            raise WorkerFailure("The imported ChatGPT session has expired or is incomplete.", 401)
-        facts.pop("authenticated", None)
+        session = await _read_session(self.driver)
+        facts = {"email": session.get("email", ""), "name": session.get("user", ""),
+                 "user_id": session.get("user_id", "")}
         if not facts.get("user_id") and not facts.get("email"):
-            raise WorkerFailure("The ChatGPT session did not identify its account.", 401)
+            raise WorkerFailure("The ChatGPT session did not identify its account. Retry verification.", 502)
         facts["models"] = await self._catalog()
         return facts
 

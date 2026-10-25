@@ -71,7 +71,7 @@ def test_crashed_browser_is_runtime_failure_not_expired_auth():
 
 
 @pytest.mark.parametrize("close_fails", [False, True])
-def test_failed_authentication_discards_partially_connected_driver(close_fails):
+def test_failed_connection_discards_partially_connected_driver_without_expiring_auth(close_fails):
     class FailedDriver:
         is_connected = False
         closed = False
@@ -89,7 +89,7 @@ def test_failed_authentication_discards_partially_connected_driver(close_fails):
         worker.driver = driver
         with pytest.raises(WorkerFailure) as error:
             await worker._ensure()
-        assert error.value.status == 401
+        assert error.value.status == 503
         assert "private" not in str(error.value)
         assert driver.closed and worker.driver is None
     asyncio.run(scenario())
@@ -115,6 +115,148 @@ def test_cancelled_connect_discards_partially_opened_driver():
         with pytest.raises(asyncio.CancelledError):
             await task
         assert driver.closed and worker.driver is None
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("status", [401, 403, 429, 503])
+def test_session_failure_status_survives_connection_cleanup(status):
+    class Driver:
+        is_connected = False
+        closed = False
+        async def connect(self):
+            raise WorkerFailure("Redacted session failure", status, 12 if status == 429 else None)
+        async def close(self):
+            self.closed = True
+    async def scenario():
+        worker = BrowserWorker({})
+        worker.driver = driver = Driver()
+        with pytest.raises(WorkerFailure) as error:
+            await worker._ensure()
+        assert error.value.status == status
+        assert error.value.retry_after == (12 if status == 429 else None)
+        assert driver.closed and worker.driver is None
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("first", [None, "<html>PRIVATE challenge</html>", {"status": 503},
+                                    {"status": 200, "session": {"token": ""}}])
+def test_session_probe_recovers_from_page_load_and_transient_failures(monkeypatch, first):
+    from upool.proxy.worker import _read_session
+    class Driver:
+        replies = [first, {"status": 200, "session": {"token": "synthetic", "user_id": "one"}}]
+        async def _js_strict(self, expression, timeout):
+            return self.replies.pop(0)
+    async def no_wait(delay):
+        pass
+    monkeypatch.setattr("upool.proxy.worker.asyncio.sleep", no_wait)
+    async def scenario():
+        driver = Driver()
+        assert (await _read_session(driver))["user_id"] == "one"
+        assert driver.replies == []
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("reply,status", [
+    ({"status": 401}, 401),
+    ({"status": 200, "session": {"token": ""}}, 401),
+    ({"status": 403}, 403),
+    ({"status": 429, "retry_after": "7"}, 429),
+    ({"status": 503}, 503),
+    ("<html>PRIVATE challenge</html>", 503),
+])
+def test_session_probe_distinguishes_auth_blocking_and_network_errors(monkeypatch, reply, status):
+    from upool.proxy.worker import _read_session
+    class Driver:
+        async def _js_strict(self, expression, timeout):
+            return reply
+    monkeypatch.setattr("upool.proxy.worker._SESSION_TIMEOUT", 0.04)
+    async def no_wait(delay):
+        pass
+    monkeypatch.setattr("upool.proxy.worker.asyncio.sleep", no_wait)
+    async def scenario():
+        with pytest.raises(WorkerFailure) as error:
+            await _read_session(Driver())
+        assert error.value.status == status
+        assert "PRIVATE" not in str(error.value)
+        if status == 429:
+            assert error.value.retry_after == 7
+    asyncio.run(scenario())
+
+
+def test_session_probe_cancellation_propagates():
+    from upool.proxy.worker import _read_session
+    class Driver:
+        async def _js_strict(self, expression, timeout):
+            raise asyncio.CancelledError()
+    async def scenario():
+        with pytest.raises(asyncio.CancelledError):
+            await _read_session(Driver())
+    asyncio.run(scenario())
+
+
+def test_session_probe_javascript_preserves_status_and_limits_returned_fields():
+    import shutil
+    import subprocess
+    from upool.proxy.worker import _SESSION_PROBE
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Session probe fixtures use the UI development Node runtime")
+    script = "const probe = " + json.dumps(_SESSION_PROBE) + ";" + r"""
+    (async () => {
+      const results = [];
+      for (const scenario of ['ok', 'signed-out', 'blocked', 'limited', 'server', 'html', 'network', 'origin', 'loading']) {
+        global.location = {origin: scenario === 'origin' ? 'https://chatgpt.com.attacker.invalid' : 'https://chatgpt.com'};
+        global.document = {readyState: scenario === 'loading' ? 'loading' : 'complete'};
+        let fetched = false, parsed = false;
+        global.fetch = async (url, options) => {
+          fetched = true;
+          if (url !== '/api/auth/session' || options.credentials !== 'include' || options.cache !== 'no-store' || !options.signal)
+            throw Error('Invalid session request');
+          if (scenario === 'network') throw Error('PRIVATE network data');
+          const status = {blocked: 403, limited: 429, server: 503}[scenario] || 200;
+          return {status, ok: status === 200, headers: {get: () => '17'}, json: async () => {
+            parsed = true;
+            if (scenario === 'html') throw Error('PRIVATE HTML');
+            if (scenario === 'signed-out') return {};
+            return {accessToken: 'synthetic', user: {id: 'one', name: 'Test'}, unexpected: 'PRIVATE'};
+          }};
+        };
+        results.push({scenario, result: JSON.parse(await eval(probe)), fetched, parsed});
+      }
+      console.log(JSON.stringify(results));
+    })().catch(() => process.exit(1));
+    """
+    result = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert "PRIVATE" not in result.stdout
+    rows = {row["scenario"]: row for row in json.loads(result.stdout)}
+    assert rows["ok"]["result"]["session"] == {
+        "token": "synthetic", "user": "Test", "email": "", "user_id": "one"}
+    assert rows["signed-out"]["result"]["session"]["token"] == ""
+    for scenario, status in [("blocked", 403), ("limited", 429), ("server", 503)]:
+        assert rows[scenario]["result"]["status"] == status
+        assert not rows[scenario]["parsed"]
+    assert rows["limited"]["result"]["retry_after"] == "17"
+    for scenario in ("html", "network", "origin", "loading"):
+        assert rows[scenario]["result"]["status"] == 503
+    assert not rows["origin"]["fetched"] and not rows["loading"]["fetched"]
+
+
+def test_failed_token_refresh_preserves_previous_token_and_timestamp():
+    from upool.proxy.worker import _compatible_driver_type
+    class Driver:
+        def __init__(self):
+            self._completion = object()
+            self._access_token = "previous-synthetic-token"
+            self._token_fetched_at = 123
+        async def _js_strict(self, expression, timeout):
+            return {"status": 403}
+    async def scenario():
+        driver = _compatible_driver_type(Driver)()
+        with pytest.raises(WorkerFailure) as error:
+            await driver._refresh_token()
+        assert error.value.status == 403
+        assert driver._access_token == "previous-synthetic-token" and driver._token_fetched_at == 123
     asyncio.run(scenario())
 
 
@@ -911,6 +1053,8 @@ def _projection_driver(monkeypatch):
                                    "ignored_body": "PRIVATE-PROMPT-TOKEN-ERROR-BODY"})
             return json.dumps({"nodes": {}, "current_node": None})
         async def _js_strict(self, expression, timeout=15):
+            if "/api/auth/session" in expression:
+                return json.dumps({"status": 200, "session": {"token": "synthetic-token"}})
             return json.dumps(_fresh_state())
         async def navigate_new_chat(self):
             pass

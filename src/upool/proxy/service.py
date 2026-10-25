@@ -267,11 +267,19 @@ class ProxyService:
         except Exception as exc:
             if reserved:
                 self.engines.stop_account(account["id"])
-            self.store.update(account["id"], {"status": "reauth" if isinstance(exc, ProxyError) and exc.status == 401 else "error",
-                                             "error": "The cookie session could not be verified."})
+            status = exc.status if isinstance(exc, ProxyError) else 502
+            message = {
+                400: "The browser rejected the cookie export. Check the export format.",
+                401: "ChatGPT did not accept this session. Open its managed profile and sign in, then refresh the account.",
+                403: "ChatGPT blocked session verification. Open its managed profile and complete any browser verification, then refresh the account.",
+                409: "Account verification is busy. Wait for the current operation to finish and retry.",
+                429: "ChatGPT session verification is rate limited. Wait and refresh the account.",
+            }.get(status, "The cookie session could not be verified because the browser or ChatGPT is unavailable. Retry or open its managed profile, then refresh the account.")
+            self.store.update(account["id"], {"status": "reauth" if status == 401 else "error",
+                                             "error": message})
             if isinstance(exc, ProxyError):
-                raise ProxyError("The cookie session could not be verified. Open its profile or import a fresh export.", exc.status, exc.code) from None
-            raise ProxyError("The cookie session could not be verified.") from None
+                raise ProxyError(message, exc.status, exc.code) from None
+            raise ProxyError(message) from None
         finally:
             if reserved:
                 self._release({"id": source_id})

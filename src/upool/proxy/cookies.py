@@ -99,6 +99,8 @@ def parse_cookies(text: str) -> list[dict[str, Any]]:
     sessions = [c for c in cookies.values() if _session(c["name"]) and c["value"]]
     if not sessions:
         raise ProxyError("The export does not contain a ChatGPT session cookie.", 400, "invalid_cookie")
-    if any(c.get("expires", time.time() + 1) <= time.time() for c in sessions):
+    now = time.time()
+    live = [c for c in cookies.values() if c.get("expires", now + 1) > now]
+    if not any(_session(c["name"]) and c["value"] for c in live):
         raise ProxyError("The ChatGPT session cookie has expired. Export a fresh session.", 401, "auth_expired")
-    return list(cookies.values())
+    return live

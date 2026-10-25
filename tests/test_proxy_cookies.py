@@ -34,3 +34,15 @@ def test_chunked_sessions_are_accepted_but_unrelated_prefixes_are_not():
     assert len(parse_cookies("__Secure-authjs.session-token.0=fake0; __Secure-authjs.session-token.1=fake1")) == 2
     with pytest.raises(ProxyError):
         parse_cookies("__Secure-authjs.session-token-other=fake")
+
+
+def test_expired_export_entries_do_not_reject_a_live_session(monkeypatch):
+    monkeypatch.setattr("upool.proxy.cookies.time.time", lambda: 1000)
+    live = {"name": "__Secure-authjs.session-token", "value": "live", "expires": 2000}
+    old = {"name": "__Secure-next-auth.session-token", "value": "old", "expires": 999}
+    expired_preference = {"name": "preference", "value": "old", "expires": 999}
+    cookies = parse_cookies(json.dumps([old, live, expired_preference]))
+    assert [cookie["value"] for cookie in cookies] == ["live"]
+    with pytest.raises(ProxyError) as error:
+        parse_cookies(json.dumps([old]))
+    assert error.value.code == "auth_expired"

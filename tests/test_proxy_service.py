@@ -111,6 +111,26 @@ def test_store_key_is_stable_and_public_accounts_have_no_secrets():
     assert service.engines.adopted
 
 
+@pytest.mark.parametrize("status,expected", [
+    (401, "did not accept"), (403, "browser verification"), (429, "rate limited"),
+    (502, "unavailable"), (503, "unavailable"), (504, "unavailable"),
+])
+def test_import_reports_failure_category_without_blaming_cookie_age(status, expected):
+    engines = Engines()
+    def fail(account, cookies):
+        raise ProxyError("PRIVATE upstream body", status, "account_action_failed")
+    engines.verify_chatgpt = fail
+    service = ProxyService(engines)
+    with pytest.raises(ProxyError) as error:
+        service.import_cookie("__Secure-next-auth.session-token=PRIVATE")
+    assert error.value.status == status and expected in str(error.value)
+    assert "fresh export" not in str(error.value) and "PRIVATE" not in str(error.value)
+    account = service.store.accounts()[0]
+    assert account["status"] == ("reauth" if status == 401 else "error")
+    assert account["error"] == str(error.value)
+    assert not service._busy
+
+
 def test_round_robin_telemetry_and_profile_creation_without_switch():
     engines = Engines()
     service = ProxyService(engines)
