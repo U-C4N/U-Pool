@@ -1122,7 +1122,7 @@ def main() -> int:
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     if args.version:
-        print("U-Pool ChatGPT Worker 1.0.0; Web2API 497527dceabfa3f95961e23c291e618c5570f1ac")
+        print("U-Pool ChatGPT Worker 1.0.1; Web2API 497527dceabfa3f95961e23c291e618c5570f1ac")
         return 0
     if args.self_test:
         # Validate dynamic imports in the compiled artifact without a browser/account.

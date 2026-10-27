@@ -2,10 +2,10 @@
 
 **Your AI coding tools, accounts and local API in one desktop app.**
 
-Switch providers for Claude Code, Codex, Hermes and OpenCode, manage Cursor accounts, and track local token usage. New in **1.0.0**: connect ChatGPT and Grok accounts to a managed API pool with one local endpoint.
+Switch providers for Claude Code, Codex, Hermes and OpenCode, manage Cursor accounts, and track local token usage. **1.0.1** adds Refuseless and live provider model discovery, alongside the managed ChatGPT/Grok API pool introduced in 1.0.0.
 
 <p align="center">
-  <a href="https://github.com/U-C4N/U-Pool/releases/latest"><img src="https://img.shields.io/badge/source-1.0.0-007aff?style=for-the-badge" alt="Source version 1.0.0" /></a>
+  <a href="https://github.com/U-C4N/U-Pool/releases/latest"><img src="https://img.shields.io/badge/source-1.0.1-007aff?style=for-the-badge" alt="Source version 1.0.1" /></a>
   <img src="https://img.shields.io/badge/desktop-Python_%2B_Next.js-18181b?style=for-the-badge" alt="Python and Next.js desktop app" />
   <img src="https://img.shields.io/badge/API_pool-Windows_x64-0078d4?style=for-the-badge" alt="API pool requires Windows x64" />
   <a href="https://github.com/U-C4N/U-Pool/stargazers"><img src="https://img.shields.io/github/stars/U-C4N/U-Pool?style=for-the-badge&color=007aff" alt="GitHub stars" /></a>
@@ -13,7 +13,7 @@ Switch providers for Claude Code, Codex, Hermes and OpenCode, manage Cursor acco
 
 <p align="center">
   <a href="https://github.com/U-C4N/U-Pool/releases/latest"><strong>Download</strong></a> ·
-  <a href="#whats-new-in-100">What's new</a> ·
+  <a href="#whats-new-in-101">What's new</a> ·
   <a href="docs/api-gateway.md">API guide</a> ·
   <a href="#run-from-source">Build from source</a>
 </p>
@@ -26,7 +26,15 @@ Switch providers for Claude Code, Codex, Hermes and OpenCode, manage Cursor acco
 
 > **API support in 1.0.0:** ChatGPT coding support is experimental. See [API compatibility](#api-compatibility) and the [validation record](docs/v1-validation.md) for tested behavior and outstanding live-account and clean-machine checks.
 
-## What's new in 1.0.0
+## What's new in 1.0.1
+
+- **Refuseless:** choose the **! Refuseless** preset under **+ Add provider** in Claude Code, Claude Desktop, Codex, Hermes or OpenCode.
+- **Live model catalogue:** enter your key, open **Advanced options → Load models**, search the complete catalogue and select a model. Claude also offers a small/fast model selection. Compatible providers can use the same discovery flow; manual model IDs remain supported.
+- **Current 1.0 features:** the API pool, managed runtimes and session-validation improvements remain included. This release supersedes the separate 0.9.1 maintenance build.
+
+For Claude Code, the preset uses `https://api.refuseless.com` and bearer authentication. Codex, Hermes and OpenCode use `https://api.refuseless.com/v1` with their respective Responses/chat protocols. See [validation and API examples](docs/v1.0.1-validation.md).
+
+## Introduced in 1.0.0
 
 - **One local API:** ChatGPT cookie sessions and Grok device OAuth accounts behind `http://127.0.0.1:8318/v1`, protected by a single client key.
 - **Managed components:** install the pinned browser and API engines from the app. Each account has its own profile, session checks and recovery controls.
@@ -148,7 +156,7 @@ python scripts/build.py
 python scripts/build.py --skip-ui --reuse-proxy-worker
 ```
 
-Outputs: `dist/U-Pool/U-Pool.exe`, `dist/U-Pool-1.0.0-win64.zip` and `dist/SHA256SUMS.txt`. The build prepares an isolated API worker, includes license notices, and smoke-tests the executable. Browser/engine downloads use pinned versions and verified hashes.
+Outputs: `dist/U-Pool/U-Pool.exe`, `dist/U-Pool-1.0.1-win64.zip` and `dist/SHA256SUMS.txt`. The build prepares an isolated API worker, includes license notices, and smoke-tests the executable. Browser/engine downloads use pinned versions and verified hashes.
 
 Review the [outstanding validation](docs/v1-validation.md#outstanding-validation) and document any remaining limitations when publishing. Attach the ZIP and checksum file to a GitHub release tagged `vX.Y.Z` for the in-app updater.
 
@@ -158,6 +166,7 @@ Review the [outstanding validation](docs/v1-validation.md#outstanding-validation
 
 | Guide | Contents |
 | --- | --- |
+| [1.0.1 validation and Refuseless](docs/v1.0.1-validation.md) | Release checks, model discovery and API examples |
 | [API setup and limits](docs/api-gateway.md) | Account setup, requests, client compatibility, recovery and live validation |
 | [Configuration and account switching](docs/configuration.md) | Files and registry keys, backups, Cursor behavior and per-app details |
 | [1.0.0 validation](docs/v1-validation.md) | Automated checks, packaged tests and outstanding validation |

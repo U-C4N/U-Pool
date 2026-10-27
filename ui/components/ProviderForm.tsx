@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { type ProviderPreset, presetsFor } from "@/lib/presets";
 import type { AppId, ProviderDetail, ProviderToggles } from "@/lib/types";
 import { PresetIcon } from "./BrandMarks";
+import { ProviderModels } from "./ProviderModels";
 import { ArrowLeftIcon, ChevronIcon, PlusIcon, XIcon } from "./icons";
 import {
   Button,
@@ -231,7 +232,9 @@ export function ProviderForm({
   onSave: (draft: Draft) => void;
 }) {
   const catalog = useMemo(() => presetsFor(app), [app]);
-  const defaultPresetId = "custom";
+  const defaultPresetId = initial
+    ? catalog.find((preset) => preset.base_url && preset.base_url === initial.base_url)?.id ?? "custom"
+    : "custom";
   const [draft, setDraft] = useState<Draft>(() =>
     initial
       ? { ...initial }
@@ -556,6 +559,13 @@ export function ProviderForm({
 
           {advanced ? (
             <div className="animate-fade-in mt-4 space-y-5">
+              {!locked ? (
+                <ProviderModels
+                  provider={draft}
+                  onSelect={(id) => set("model", id)}
+                  onSelectFast={family === "anthropic" ? (id) => set("small_fast_model", id) : undefined}
+                />
+              ) : null}
               <div className="grid gap-5 sm:grid-cols-2">
                 <Field
                   label="Model"

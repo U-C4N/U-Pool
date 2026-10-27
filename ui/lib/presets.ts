@@ -28,7 +28,23 @@ export type ProviderPreset = {
  * Kimi Coding, OpenRouter, MiniMax CH/Global, Z.ai, Zhipu GLM, Nvidia NIM,
  * OpenCode Go, Xiaomi MiMo, Azure, xAI (+ Custom).
  */
+const REFUSELESS: ProviderPreset = {
+  id: "refuseless",
+  name: "Refuseless",
+  website: "https://refuseless.com",
+  base_url: "https://api.refuseless.com/v1",
+  model: "glm-5.3-abliterated",
+  note: "Load the complete live model catalogue in Advanced options.",
+  tint: "#111111",
+};
+
 export const CLAUDE_PRESETS: ProviderPreset[] = [
+  {
+    ...REFUSELESS,
+    base_url: "https://api.refuseless.com",
+    auth_style: "auth_token",
+    small_fast_model: "glm-5.3-flash-abliterated",
+  },
   {
     id: "custom",
     name: "Custom",
@@ -177,6 +193,7 @@ export const CLAUDE_PRESETS: ProviderPreset[] = [
 ];
 
 export const CODEX_PRESETS: ProviderPreset[] = [
+  { ...REFUSELESS, wire_api: "responses", env_key: "OPENAI_API_KEY" },
   {
     id: "custom",
     name: "Custom",
@@ -435,6 +452,7 @@ export const CODEX_PRESETS: ProviderPreset[] = [
  * one record; each catalogue is written against the config file its app reads.
  */
 export const HERMES_PRESETS: ProviderPreset[] = [
+  { ...REFUSELESS, transport: "chat_completions" },
   {
     id: "custom",
     name: "Custom",
@@ -497,6 +515,7 @@ export const HERMES_PRESETS: ProviderPreset[] = [
  * however OpenAI-shaped its URL looks.
  */
 export const OPENCODE_PRESETS: ProviderPreset[] = [
+  { ...REFUSELESS, npm: "@ai-sdk/openai-compatible" },
   {
     id: "custom",
     name: "Custom",

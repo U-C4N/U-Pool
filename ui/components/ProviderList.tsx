@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { AppId, HealthResult, HealthStatus, ProviderSummary } from "@/lib/types";
-import { AnthropicLogo, OpenAILogo } from "./BrandMarks";
+import { AnthropicLogo, OpenAILogo, PresetIcon } from "./BrandMarks";
 import {
   CheckIcon,
   CopyIcon,
@@ -79,6 +79,10 @@ function looksClaude(provider: ProviderSummary): boolean {
 }
 
 function Avatar({ provider }: { provider: ProviderSummary }) {
+  let refuseless = false;
+  try {
+    refuseless = new URL(provider.base_url).hostname === "api.refuseless.com";
+  } catch { /* An unfinished custom provider may have no URL yet. */ }
   const openAI = looksOpenAI(provider);
   const claude = !openAI && looksClaude(provider);
   const initial = provider.name.trim().charAt(0).toUpperCase() || "?";
@@ -92,7 +96,9 @@ function Avatar({ provider }: { provider: ProviderSummary }) {
         provider.active && "ring-2 ring-brand-500/35",
       )}
     >
-      {openAI ? (
+      {refuseless ? (
+        <PresetIcon presetId="refuseless" name="Refuseless" className="h-[20px] w-[20px] text-zinc-900" />
+      ) : openAI ? (
         <OpenAILogo className="h-[18px] w-[18px] text-zinc-900" />
       ) : claude ? (
         <AnthropicLogo className="h-[18px] w-[18px] text-[#D97757]" />

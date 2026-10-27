@@ -31,6 +31,7 @@ from . import (
     adapters,
     atomicio,
     autostart,
+    catalog,
     clis,
     health,
     paths,
@@ -250,6 +251,11 @@ class Api:
         }
 
     # ------------------------------------------------------------------ test
+
+    @endpoint
+    def list_provider_models(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """The unsaved form can inspect models without changing any live config."""
+        return catalog.fetch(Provider.from_dict(payload))
 
     @endpoint
     def test_provider(self, app: str, provider_id: str) -> dict[str, Any]:

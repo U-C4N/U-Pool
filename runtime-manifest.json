@@ -21,7 +21,7 @@
   ],
   "worker": {
     "id": "chatgpt-worker",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "source_url": "https://codeload.github.com/Octo-Lex/ChatGPT-Web2API/zip/497527dceabfa3f95961e23c291e618c5570f1ac",
     "source_sha256": "0fd4fc6ba77af695fd8a3c3d35631935d8c59e88238420bda5a0754b18ba9582",
     "source_commit": "497527dceabfa3f95961e23c291e618c5570f1ac",
