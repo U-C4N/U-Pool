@@ -60,6 +60,7 @@ function ImageMark({ src, className, title }: MarkProps & { src: string }) {
 /** Map preset id → brand SVG under /brands. */
 const PRESET_ICON: Record<string, string> = {
   custom: "/brands/custom.svg",
+  refuseless: "/brands/refuseless.svg",
   anthropic: "/brands/anthropic.svg",
   "openai-api": "/brands/openai.svg",
   gemini: "/brands/google.svg",

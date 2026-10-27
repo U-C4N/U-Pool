@@ -13,6 +13,7 @@ import type {
   CursorUseResult,
   EnvInfo,
   HealthResult,
+  ModelCatalog,
   PricingInfo,
   ProviderDetail,
   SessionPurge,
@@ -94,6 +95,8 @@ export const backend = {
   reorderProviders: (app: AppId, ids: string[]) => call<AppState>("reorder_providers", app, ids),
   switchProvider: (app: AppId, id: string) => call<SwitchResult>("switch_provider", app, id),
   testProvider: (app: AppId, id: string) => call<HealthResult>("test_provider", app, id),
+  listProviderModels: (payload: Partial<ProviderDetail>) =>
+    call<ModelCatalog>("list_provider_models", payload),
   testAll: (app: AppId) => call<HealthResult[]>("test_all", app),
   readLiveConfig: (app: AppId) =>
     call<{ path: string; exists: boolean; content: string }[]>("read_live_config", app),

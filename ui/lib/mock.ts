@@ -199,7 +199,7 @@ const mockUpdate: UpdateStatus = {
   verified: "",
   skipped_version: "",
   last_check: Math.floor(Date.now() / 1000),
-  current_version: "0.9.0-mock",
+  current_version: "0.9.1-mock",
   installed_from: "",
   install_failed: "",
   busy: false,
@@ -703,7 +703,7 @@ const find = (app: AppId, id: string) => db[app].providers.find((p) => p.id === 
 export const mockApi = {
   bootstrap: () =>
     ok<Bootstrap>({
-      version: "0.9.0-mock",
+      version: "0.9.1-mock",
       platform: "browser",
       apps: [
         { id: "claude", label: "Claude Code" },
@@ -762,6 +762,16 @@ export const mockApi = {
     db[app].current = id;
     const next = state(app);
     return ok<SwitchResult>({ state: next, files: next.files, ...SWITCH_OUTCOME[app] });
+  },
+  list_provider_models: (payload: Partial<ProviderDetail>) => {
+    if (!payload.base_url || payload.official) return fail("Enter a provider endpoint to load its models.");
+    let refuseless = false;
+    try { refuseless = new URL(payload.base_url).hostname === "api.refuseless.com"; } catch { /* Invalid draft URL. */ }
+    if (!refuseless) return fail("Live model discovery is available in the desktop app. Enter a model ID manually in this browser preview.");
+    return ok({ demo: true, models: [
+      "glm-5.3-abliterated", "glm-5.3-flash-abliterated",
+      "deepseek-v4.1-flash-abliterated", "deepseek-v4.1-flash-fast", "minimax-m3.1-flash",
+    ].map((id) => ({ id, name: id, context_length: 1048576 })) });
   },
   test_provider: (app: AppId, id: string): Promise<Envelope<HealthResult>> => {
     const provider = find(app, id);

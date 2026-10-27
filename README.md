@@ -10,7 +10,7 @@ Python backend · Next.js UI · native OS webview — no Electron, no Node at ru
   <a href="https://github.com/U-C4N/U-Pool/stargazers"><img src="https://img.shields.io/github/stars/U-C4N/U-Pool?style=for-the-badge&logo=github&color=007aff" alt="Stars" /></a>
   <a href="https://github.com/U-C4N/U-Pool/network/members"><img src="https://img.shields.io/github/forks/U-C4N/U-Pool?style=for-the-badge&logo=github&color=0a84ff" alt="Forks" /></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+" />
-  <a href="https://github.com/U-C4N/U-Pool/releases/latest"><img src="https://img.shields.io/badge/version-0.9.0-informational?style=for-the-badge" alt="Version 0.9.0" /></a>
+  <a href="https://github.com/U-C4N/U-Pool/releases/tag/v0.9.1"><img src="https://img.shields.io/badge/version-0.9.1-informational?style=for-the-badge" alt="Version 0.9.1" /></a>
 </p>
 
 <p align="center">
@@ -21,7 +21,28 @@ Python backend · Next.js UI · native OS webview — no Electron, no Node at ru
   <sub>The Cursor pool (a 0.8.0 capture) — one account in use, one browser-cookie row with Use disabled, one expired. 0.9.0 adds a seventh, read-only <b>Usage</b> tab: per-day, per-model token and cost totals for Claude Code and Codex.</sub>
 </p>
 
-**Download:** grab `U-Pool-0.9.0-win64.zip` from the [latest release](https://github.com/U-C4N/U-Pool/releases/latest), unzip it somewhere you own (**not** `Program Files` — Windows will not let the app replace itself there on update) and run `U-Pool.exe`. It updates itself from then on. Building from source is [below](#quick-start).
+**Download:** grab `U-Pool-0.9.1-win64.zip` from the [0.9.1 release](https://github.com/U-C4N/U-Pool/releases/tag/v0.9.1), unzip it somewhere you own (**not** `Program Files` — Windows will not let the app replace itself there on update) and run `U-Pool.exe`. Building from source is [below](#quick-start). This is a maintenance release based on 0.9.0; the separate 1.0.0 line remains the latest release for the in-app updater.
+
+## New in 0.9.1: Refuseless and live model discovery
+
+Refuseless is available with its **!** mark in every provider tab. Choose the preset, paste your own API key, and open **Advanced options → Load models** to see the complete catalogue available to that key. Search by ID/name, select the main model, or select a small/fast model for Claude. Model discovery works for other providers that expose a compatible `/models` endpoint too; manual model IDs remain available.
+
+Claude Code uses `https://api.refuseless.com` with bearer authentication and the Messages API. Codex uses `https://api.refuseless.com/v1` with Responses; Hermes uses chat completions and OpenCode uses `@ai-sdk/openai-compatible`. Claude Desktop retains its existing preview-only behavior.
+
+Example requests (set `REFUSELESS_API_KEY` in your shell; no key is included in the app or these examples):
+
+```sh
+curl https://api.refuseless.com/v1/models \
+  -H "Authorization: Bearer $REFUSELESS_API_KEY"
+
+curl https://api.refuseless.com/v1/messages \
+  -H "Authorization: Bearer $REFUSELESS_API_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"glm-5.3-flash-abliterated","max_tokens":128,"messages":[{"role":"user","content":"Reply with OK only."}]}'
+```
+
+See the [Refuseless model docs](https://docs.refuseless.com/models), [SDK guide](https://docs.refuseless.com/sdks), and [0.9.1 validation](docs/v0.9.1-validation.md). The provider's live catalogue is authoritative, including models added after publication.
 
 **Platforms:** the app, every config-file write and the Cursor pool are cross-platform. Three integrations are Windows-only — the `HKCU\Environment` writes, launch at sign-in, and the in-app updater — and say so where they appear.
 
@@ -196,7 +217,7 @@ The header shows the installed **Claude Code** and **Codex** versions (Hermes an
 
 ## Quick start
 
-**Just want the app?** [Download the latest release](https://github.com/U-C4N/U-Pool/releases/latest) — no toolchain needed.
+**Just want this version?** [Download 0.9.1](https://github.com/U-C4N/U-Pool/releases/tag/v0.9.1) — no toolchain needed.
 
 **From source** (Python 3.11+, Node 20+):
 

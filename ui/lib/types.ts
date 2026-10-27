@@ -89,6 +89,17 @@ export interface AppState {
   files: string[];
 }
 
+export interface ProviderModel {
+  id: string;
+  name: string;
+  context_length: number | null;
+}
+
+export interface ModelCatalog {
+  models: ProviderModel[];
+  demo?: boolean;
+}
+
 /** Preferences that belong to U-Pool itself rather than to a provider. */
 export interface AppSettings {
   /** What the OS actually reports, not just what was asked for. */
