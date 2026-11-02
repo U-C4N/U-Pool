@@ -2,10 +2,10 @@
 
 **Your AI coding tools, accounts and local API in one desktop app.**
 
-Switch providers for Claude Code, Codex, Hermes and OpenCode, manage Cursor accounts, and track local token usage. **1.0.1** adds Refuseless and live provider model discovery, alongside the managed ChatGPT/Grok API pool introduced in 1.0.0.
+Switch providers for Claude Code, Codex, Hermes and OpenCode, manage Cursor accounts, and track local token usage. **1.0.2** adds Experiential Labs, multiple models per provider and refreshed provider presets, alongside the managed ChatGPT/Grok API pool introduced in 1.0.0.
 
 <p align="center">
-  <a href="https://github.com/U-C4N/U-Pool/releases/latest"><img src="https://img.shields.io/badge/source-1.0.1-007aff?style=for-the-badge" alt="Source version 1.0.1" /></a>
+  <a href="https://github.com/U-C4N/U-Pool/releases/latest"><img src="https://img.shields.io/badge/source-1.0.2-007aff?style=for-the-badge" alt="Source version 1.0.2" /></a>
   <img src="https://img.shields.io/badge/desktop-Python_%2B_Next.js-18181b?style=for-the-badge" alt="Python and Next.js desktop app" />
   <img src="https://img.shields.io/badge/API_pool-Windows_x64-0078d4?style=for-the-badge" alt="API pool requires Windows x64" />
   <a href="https://github.com/U-C4N/U-Pool/stargazers"><img src="https://img.shields.io/github/stars/U-C4N/U-Pool?style=for-the-badge&color=007aff" alt="GitHub stars" /></a>
@@ -13,7 +13,7 @@ Switch providers for Claude Code, Codex, Hermes and OpenCode, manage Cursor acco
 
 <p align="center">
   <a href="https://github.com/U-C4N/U-Pool/releases/latest"><strong>Download</strong></a> ·
-  <a href="#whats-new-in-101">What's new</a> ·
+  <a href="#whats-new-in-102">What's new</a> ·
   <a href="docs/api-gateway.md">API guide</a> ·
   <a href="#run-from-source">Build from source</a>
 </p>
@@ -26,9 +26,17 @@ Switch providers for Claude Code, Codex, Hermes and OpenCode, manage Cursor acco
 
 > **API support in 1.0.0:** ChatGPT coding support is experimental. See [API compatibility](#api-compatibility) and the [validation record](docs/v1-validation.md) for tested behavior and outstanding live-account and clean-machine checks.
 
-## What's new in 1.0.1
+## What's new in 1.0.2
 
-- **Refuseless:** choose the **! Refuseless** preset under **+ Add provider** in Claude Code, Claude Desktop, Codex, Hermes or OpenCode.
+- **Experiential Labs:** choose the preset in any provider tab. Claude Code uses the Anthropic Messages endpoint and `x-api-key`; Codex uses Responses, while Hermes and OpenCode use OpenAI-compatible chat.
+- **Multiple models:** open **Advanced options**, add model IDs manually or from **Load models**, remove individual models and choose the default. Claude Code 2.1.242+ receives additional `/model` picker entries; Hermes and OpenCode receive native model lists. Codex saves the list with the profile and uses the selected default. Claude Desktop remains preview-only.
+- **Provider presets:** Custom and the official API appear first. Refuseless uses its red infinity favicon in both presets and saved provider rows.
+
+See [configuration](docs/configuration.md#multiple-models) for model-list behavior and [Experiential Labs setup](https://platform.experientiallabs.ai/docs/coding-agents) for gateway details.
+
+## Introduced in 1.0.1
+
+- **Refuseless:** choose the **Refuseless** preset under **+ Add provider** in Claude Code, Claude Desktop, Codex, Hermes or OpenCode.
 - **Live model catalogue:** enter your key, open **Advanced options → Load models**, search the complete catalogue and select a model. Claude also offers a small/fast model selection. Compatible providers can use the same discovery flow; manual model IDs remain supported.
 - **Current 1.0 features:** the API pool, managed runtimes and session-validation improvements remain included. This release supersedes the separate 0.9.1 maintenance build.
 

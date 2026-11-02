@@ -96,3 +96,23 @@ def test_as_bool_reads_words_not_just_truthiness():
 def test_slug_falls_back_when_a_name_has_nothing_usable():
     assert slugify("Kadirr.Dev v2") == "kadirr_dev_v2"
     assert slugify("...", fallback="abc123") == "abc123"
+
+
+def test_additional_models_normalize_and_round_trip_without_losing_order():
+    provider = Provider.from_dict({"model": "main", "models": [" second ", "", "second", "main", "Third"]})
+    assert provider.models == ["second", "main", "Third"]
+    assert provider.model_ids == ["main", "second", "Third"]
+    assert Provider.from_dict(provider.to_dict()).models == provider.models
+
+
+@pytest.mark.parametrize("models", ["second", {"second": {}}, [12], ["a" * 513], ["a"] * 1001])
+def test_invalid_additional_models_fail_with_readable_errors(models):
+    with pytest.raises(UPoolError, match="[Mm]odel"):
+        Provider.from_dict({"models": models})
+
+
+def test_old_provider_records_have_an_independent_empty_model_list():
+    first = Provider.from_dict({"name": "First"})
+    second = Provider.from_dict({"name": "Second"})
+    first.models.append("extra")
+    assert second.models == []

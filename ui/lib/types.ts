@@ -63,6 +63,8 @@ export interface ProviderSummary extends ProviderToggles {
   website: string;
   base_url: string;
   model: string;
+  /** Additional models saved with this provider; model remains the default. */
+  models: string[];
   auth_style: AuthStyle;
   small_fast_model: string;
   wire_api: WireApi;

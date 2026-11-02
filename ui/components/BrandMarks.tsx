@@ -57,10 +57,11 @@ function ImageMark({ src, className, title }: MarkProps & { src: string }) {
   );
 }
 
-/** Map preset id → brand SVG under /brands. */
+/** Map preset id → local brand artwork under /brands. */
 const PRESET_ICON: Record<string, string> = {
   custom: "/brands/custom.svg",
-  refuseless: "/brands/refuseless.svg",
+  refuseless: "/brands/refuseless.png",
+  "experiential-labs": "/brands/experiential-labs.svg",
   anthropic: "/brands/anthropic.svg",
   "openai-api": "/brands/openai.svg",
   gemini: "/brands/google.svg",
@@ -123,5 +124,8 @@ export function PresetIcon({
   className?: string;
 }) {
   const src = PRESET_ICON[presetId] ?? "/brands/custom.svg";
+  if (presetId === "refuseless" || presetId === "experiential-labs") {
+    return <ImageMark src={src} title={name ?? presetId} className={className} />;
+  }
   return <MaskMark src={src} title={name ?? presetId} className={className} />;
 }

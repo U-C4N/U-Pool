@@ -231,7 +231,8 @@ class HermesAdapter(Adapter):
         }
         if provider.model:
             entry["default_model"] = provider.model
-            entry["models"] = {provider.model: {"name": provider.model}}
+        if provider.model_ids:
+            entry["models"] = {model: {"name": model} for model in provider.model_ids}
         for key, value in provider.extra.items():
             if not key or key in MANAGED_ENTRY_KEYS or key == PROXY_MARKER_KEY:
                 continue
@@ -239,11 +240,13 @@ class HermesAdapter(Adapter):
         # An entry that was there before may carry per-model metadata Hermes wrote
         # itself - context lengths, token limits. Only the models still named in
         # the record survive, but their details do.
-        if isinstance(existing, dict) and provider.model:
+        if isinstance(existing, dict) and provider.model_ids:
             previous = existing.get("models")
-            if isinstance(previous, dict) and isinstance(previous.get(provider.model), dict):
-                entry["models"] = {provider.model: dict(previous[provider.model])}
-                entry["models"][provider.model].setdefault("name", provider.model)
+            if isinstance(previous, dict):
+                for model in provider.model_ids:
+                    if isinstance(previous.get(model), dict):
+                        entry["models"][model] = dict(previous[model])
+                        entry["models"][model].setdefault("name", model)
         return entry
 
     def import_live(self) -> Provider | None:
@@ -264,13 +267,16 @@ class HermesAdapter(Adapter):
             for key, value in entry.items()
             if key not in MANAGED_ENTRY_KEYS and not isinstance(value, (dict, list))
         }
+        selected_model = str(model.get(MODEL_DEFAULT_KEY) or entry.get("default_model") or "")
         return Provider(
             app=APP_HERMES,
             name=str(entry.get("name") or slug),
             note="Picked up from your existing Hermes config.yaml on first run.",
             base_url=str(entry.get("api") or entry.get("base_url") or ""),
             api_key=str(entry.get("api_key") or ""),
-            model=str(model.get(MODEL_DEFAULT_KEY) or entry.get("default_model") or ""),
+            model=selected_model,
+            models=[str(key) for key in entry.get("models", {}) if str(key) != selected_model]
+            if isinstance(entry.get("models"), dict) else [],
             transport=transport if transport in TRANSPORTS else TRANSPORT_ANTHROPIC,
             extra=extra,
         )

@@ -72,6 +72,24 @@ BOOL_FIELDS = (
 )
 
 _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
+MAX_PROVIDER_MODELS = 1000
+MAX_MODEL_ID_LENGTH = 512
+
+
+def normalize_models(value: Any) -> list[str]:
+    """Additional model IDs keep their order across form and storage round trips."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > MAX_PROVIDER_MODELS:
+        raise UPoolError(f"Models must be a list of at most {MAX_PROVIDER_MODELS} model IDs.")
+    unique: dict[str, None] = {}
+    for model in value:
+        if not isinstance(model, str) or len(model) > MAX_MODEL_ID_LENGTH:
+            raise UPoolError(f"Each model ID must be text of at most {MAX_MODEL_ID_LENGTH} characters.")
+        model = model.strip()
+        if model:
+            unique[model] = None
+    return list(unique)
 
 
 def slugify(name: str, fallback: str = "provider") -> str:
@@ -94,6 +112,7 @@ class Provider:
     base_url: str = ""
     api_key: str = ""
     model: str = ""
+    models: list[str] = field(default_factory=list)
 
     # Claude Code
     auth_style: str = AUTH_TOKEN
@@ -134,6 +153,10 @@ class Provider:
     def slug(self) -> str:
         return slugify(self.name, fallback=self.id[:8])
 
+    @property
+    def model_ids(self) -> list[str]:
+        return list(dict.fromkeys(model for model in [self.model.strip(), *normalize_models(self.models)] if model))
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -148,6 +171,7 @@ class Provider:
         known = {f for f in cls.__dataclass_fields__}  # noqa: SLF001 - dataclass API
         clean = {k: v for k, v in data.items() if k in known}
         clean.setdefault("id", uuid.uuid4().hex)
+        clean["models"] = normalize_models(clean.get("models"))
         extra = clean.get("extra") or {}
         clean["extra"] = {str(k): str(v) for k, v in dict(extra).items()}
         for key in BOOL_FIELDS:
@@ -180,6 +204,7 @@ def validate(provider: Provider) -> None:
         raise UPoolError(f"Unknown app '{provider.app}'.")
     if not provider.name.strip():
         raise UPoolError("Provider name is required.")
+    provider.models = normalize_models(provider.models)
     if provider.official:
         return
     if not provider.base_url.strip():

@@ -142,6 +142,7 @@ function seed(app: AppId, name: string, base: string, official = false): Provide
     base_url: official ? "" : base,
     api_key: official ? "" : "sk-demo-0000-0000",
     model: "",
+    models: [],
     auth_style: "auth_token",
     small_fast_model: "",
     wire_api: "responses",
@@ -172,13 +173,13 @@ const mockSettings: AppSettings = {
 };
 
 const mockRelease: ReleaseInfo = {
-  tag: "v1.0.1",
-  version: "1.0.1",
+  tag: "v1.0.2",
+  version: "1.0.2",
   notes: "Pretend release notes for the browser preview.",
   html_url: "https://github.com/U-C4N/U-Pool/releases/latest",
   published_at: "2026-08-01T00:00:00Z",
-  asset_name: "U-Pool-1.0.1-win64.zip",
-  asset_url: "https://github.com/U-C4N/U-Pool/releases/download/v1.0.1/U-Pool-1.0.1-win64.zip",
+  asset_name: "U-Pool-1.0.2-win64.zip",
+  asset_url: "https://github.com/U-C4N/U-Pool/releases/download/v1.0.2/U-Pool-1.0.2-win64.zip",
   asset_size: 48 * 1024 * 1024,
   asset_sha256: "0".repeat(64),
   checksums_url: "",
@@ -201,7 +202,7 @@ const mockUpdate: UpdateStatus = {
   verified: "",
   skipped_version: "",
   last_check: Math.floor(Date.now() / 1000),
-  current_version: "1.0.1-mock",
+  current_version: "1.0.2-mock",
   installed_from: "",
   install_failed: "",
   busy: false,
@@ -736,7 +737,7 @@ function proxyAccount(provider: ProxyAccount["provider"], name: string): ProxyAc
 export const mockApi = {
   bootstrap: () =>
     ok<Bootstrap>({
-      version: "1.0.1-mock",
+      version: "1.0.2-mock",
       platform: "browser",
       apps: [
         { id: "claude", label: "Claude Code" },

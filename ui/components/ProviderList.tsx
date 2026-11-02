@@ -79,10 +79,20 @@ function looksClaude(provider: ProviderSummary): boolean {
 }
 
 function Avatar({ provider }: { provider: ProviderSummary }) {
-  let refuseless = false;
-  try {
-    refuseless = new URL(provider.base_url).hostname === "api.refuseless.com";
-  } catch { /* An unfinished custom provider may have no URL yet. */ }
+  let presetId = "";
+  for (const url of [provider.base_url, provider.website]) {
+    try {
+      const hostname = new URL(url).hostname;
+      if (hostname === "refuseless.com" || hostname.endsWith(".refuseless.com")) {
+        presetId = "refuseless";
+        break;
+      }
+      if (hostname === "experientiallabs.ai" || hostname.endsWith(".experientiallabs.ai")) {
+        presetId = "experiential-labs";
+        break;
+      }
+    } catch { /* An unfinished custom provider may have no URL yet. */ }
+  }
   const openAI = looksOpenAI(provider);
   const claude = !openAI && looksClaude(provider);
   const initial = provider.name.trim().charAt(0).toUpperCase() || "?";
@@ -96,8 +106,8 @@ function Avatar({ provider }: { provider: ProviderSummary }) {
         provider.active && "ring-2 ring-brand-500/35",
       )}
     >
-      {refuseless ? (
-        <PresetIcon presetId="refuseless" name="Refuseless" className="h-[20px] w-[20px] text-zinc-900" />
+      {presetId ? (
+        <PresetIcon presetId={presetId} name={presetId === "refuseless" ? "Refuseless" : "Experiential Labs"} className="h-[24px] w-[24px]" />
       ) : openAI ? (
         <OpenAILogo className="h-[18px] w-[18px] text-zinc-900" />
       ) : claude ? (

@@ -39,6 +39,7 @@ function blank(app: AppId): Draft {
     base_url: "",
     api_key: "",
     model: "",
+    models: [],
     auth_style: "auth_token",
     small_fast_model: "",
     wire_api: "responses",
@@ -237,7 +238,7 @@ export function ProviderForm({
     : "custom";
   const [draft, setDraft] = useState<Draft>(() =>
     initial
-      ? { ...initial }
+      ? { ...initial, models: [...(initial.models ?? [])] }
       : draftFromPreset(app, catalog.find((p) => p.id === defaultPresetId) ?? catalog[0]),
   );
   const [presetId, setPresetId] = useState(defaultPresetId);
@@ -455,7 +456,7 @@ export function ProviderForm({
         <div className="relative z-[1]">
         <div className="mb-6 flex justify-center">
           <span className="grid h-16 w-16 place-items-center rounded-[20px] bg-white/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_10px_24px_-14px_rgba(15,23,42,0.4)]">
-            {!editing && activePreset ? (
+            {activePreset && activePreset.id !== "custom" ? (
               <span style={{ color: activePreset.tint ?? "var(--color-label)" }}>
                 <PresetIcon
                   presetId={activePreset.id}
@@ -553,7 +554,7 @@ export function ProviderForm({
             Advanced options
           </button>
           <p className="mt-1 pl-5.5 text-xs text-zinc-400">
-            Model override, authentication style, permission switches and pass-through fields.
+            Multiple models, authentication style, permission switches and pass-through fields.
             Defaults are fine for most providers.
           </p>
 
@@ -563,12 +564,13 @@ export function ProviderForm({
                 <ProviderModels
                   provider={draft}
                   onSelect={(id) => set("model", id)}
+                  onModelsChange={(models) => set("models", models)}
                   onSelectFast={family === "anthropic" ? (id) => set("small_fast_model", id) : undefined}
                 />
               ) : null}
               <div className="grid gap-5 sm:grid-cols-2">
                 <Field
-                  label="Model"
+                  label="Default model"
                   hint={
                     family === "opencode"
                       ? "Required. OpenCode selects a provider as \"<provider>/<model>\", so this is half of the switch."

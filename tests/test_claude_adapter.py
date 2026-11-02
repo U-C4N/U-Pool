@@ -337,6 +337,93 @@ def test_import_live_returns_none_without_a_base_url(adapter, settings_path):
     assert adapter.import_live() is None
 
 
+def test_multiple_models_append_to_picker_and_keep_hand_authored_settings(adapter, settings_path):
+    own_row = {"model": "mine", "label": "My model", "description": "Keep this"}
+    write(settings_path, {"modelPicker": {"options": [own_row], "replaceBuiltInOptions": True},
+                          "availableModels": ["mine"], "model": "mine"})
+    adapter.apply(provider(model="main", models=["second", "main", "third"]))
+    data = read(settings_path)
+    assert data["modelPicker"] == {"options": [own_row, {"model": "main"}, {"model": "second"}, {"model": "third"}],
+                                   "replaceBuiltInOptions": True}
+    assert data["availableModels"] == ["mine"]
+    assert data["model"] == "mine"
+    imported = adapter.import_live()
+    assert imported is not None
+    assert imported.model == "main"
+    assert imported.models == ["mine", "second", "third"]
+
+
+def test_switching_removes_only_unchanged_owned_model_rows(adapter, settings_path):
+    own_row = {"model": "mine"}
+    write(settings_path, {"modelPicker": {"options": [own_row]}})
+    adapter.apply(provider(model="main", models=["mine", "second"]))
+    data = read(settings_path)
+    data["modelPicker"]["options"][1]["label"] = "Edited by hand"
+    write(settings_path, data)
+    result = adapter.apply(official())
+    assert read(settings_path)["modelPicker"] == {"options": [own_row, {"model": "main", "label": "Edited by hand"}]}
+    assert "modelPicker.options.second" in result.removed
+
+
+def test_clearing_additional_models_removes_the_picker_created_by_the_switch(adapter, settings_path):
+    adapter.apply(provider(model="main", models=["extra"]))
+    adapter.apply(provider(model="main"))
+    assert "modelPicker" not in read(settings_path)
+
+
+def test_case_sensitive_model_claims_are_all_cleaned_up_on_official_switch(adapter, settings_path):
+    adapter.apply(provider(model="CaseModel", models=["casemodel"]))
+    assert read(settings_path)["modelPicker"]["options"] == [{"model": "CaseModel"}, {"model": "casemodel"}]
+    adapter.apply(official())
+    assert "modelPicker" not in read(settings_path)
+
+
+def test_legacy_json_model_claims_are_still_cleaned_up(adapter, settings_path):
+    from upool import claims
+    from upool.adapters.claude import MODEL_PICKER_CLAIM
+
+    row = {"model": "LegacyModel"}
+    write(settings_path, {"modelPicker": {"options": [row]}})
+    claims.write(MODEL_PICKER_CLAIM, [json.dumps(row)])
+    adapter.apply(official())
+    assert "modelPicker" not in read(settings_path)
+
+
+def test_reswitch_keeps_model_order_and_drops_models_removed_from_the_profile(adapter, settings_path):
+    adapter.apply(provider(model="main", models=["first", "second"]))
+    adapter.apply(provider(model="main", models=["second", "third"]))
+    expected = {"options": [{"model": "main"}, {"model": "second"}, {"model": "third"}]}
+    assert read(settings_path)["modelPicker"] == expected
+    adapter.apply(provider(model="main", models=["second", "third"]))
+    assert read(settings_path)["modelPicker"] == expected
+
+
+@pytest.mark.parametrize("picker", [None, "keep", {"options": "keep", "replaceBuiltInOptions": True}])
+def test_invalid_existing_picker_is_preserved_and_reported(adapter, settings_path, picker):
+    write(settings_path, {"modelPicker": picker})
+    result = adapter.apply(provider(model="main", models=["extra"]))
+    assert read(settings_path)["modelPicker"] == picker
+    assert any("modelPicker" in warning for warning in result.warnings)
+
+
+@pytest.mark.parametrize("picker", [{}, {"options": []}, {"options": [{"model": ["odd"]}]}])
+def test_switch_without_additional_models_keeps_unclaimed_picker_even_if_empty(adapter, settings_path, picker):
+    write(settings_path, {"modelPicker": picker})
+    adapter.apply(provider())
+    assert read(settings_path)["modelPicker"] == picker
+
+
+def test_missing_or_corrupt_model_claims_never_delete_existing_picker_rows(adapter, settings_path):
+    from upool import claims
+    from upool.adapters.claude import MODEL_PICKER_CLAIM
+
+    row = {"model": "by-hand"}
+    write(settings_path, {"modelPicker": {"options": [row]}})
+    claims.write(MODEL_PICKER_CLAIM, ["broken json", '["by-hand"]', '{"model":"by-hand","label":"unowned"}'])
+    adapter.apply(official())
+    assert read(settings_path)["modelPicker"] == {"options": [row]}
+
+
 @windows_only
 def test_import_live_falls_back_to_the_environment_when_the_file_has_no_env_block(
     adapter, settings_path

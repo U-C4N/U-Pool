@@ -118,6 +118,30 @@ def test_refuseless_protocols_share_one_authenticated_catalogue(app, fields):
     assert headers["authorization"] == "Bearer test-key"
 
 
+@pytest.mark.parametrize("app, fields", [
+    ("claude", {"base_url": "https://api.experientiallabs.ai", "auth_style": "api_key"}),
+    ("claude_desktop", {"base_url": "https://api.experientiallabs.ai", "auth_style": "api_key"}),
+    ("codex", {"base_url": "https://api.experientiallabs.ai/v1"}),
+    ("hermes", {"base_url": "https://api.experientiallabs.ai/v1", "transport": "chat_completions"}),
+    ("opencode", {"base_url": "https://api.experientiallabs.ai/v1", "npm": "@ai-sdk/openai-compatible"}),
+])
+def test_experiential_protocols_share_a_bearer_authenticated_catalogue(app, fields):
+    provider = Provider(app=app, api_key="test-key", **fields)
+    url, headers = adapters.get(app).health_target(provider)
+    assert url == "https://api.experientiallabs.ai/v1/models"
+    assert headers["authorization"] == "Bearer test-key"
+    assert "x-api-key" not in headers
+    if app == "claude":
+        assert adapters.get(app).env_vars(provider)["ANTHROPIC_API_KEY"] == "test-key"
+
+
+def test_experiential_catalogue_auth_override_matches_the_exact_hostname_only():
+    provider = Provider(base_url="https://api.experientiallabs.ai.example.com", api_key="test-key", auth_style="api_key")
+    _url, headers = adapters.get("claude").health_target(provider)
+    assert headers["x-api-key"] == "test-key"
+    assert "authorization" not in headers
+
+
 def test_unsaved_draft_catalogue_does_not_save_or_activate(endpoint_server):
     url, replies, _ = endpoint_server
     api = Api()

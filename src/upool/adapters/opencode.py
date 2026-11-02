@@ -131,16 +131,16 @@ class OpenCodeAdapter(Adapter):
             "npm": npm,
             "name": provider.name,
             "options": options,
-            "models": {provider.model: {"name": provider.model}},
+            "models": {model: {"name": model} for model in provider.model_ids},
         }
         if isinstance(existing, dict):
             previous = existing.get("models")
-            if isinstance(previous, dict) and isinstance(previous.get(provider.model), dict):
-                # Context and output limits OpenCode filled in for this model are
-                # worth more than the placeholder this adapter would write.
-                kept_model = dict(previous[provider.model])
-                kept_model.setdefault("name", provider.model)
-                entry["models"] = {provider.model: kept_model}
+            if isinstance(previous, dict):
+                for model in provider.model_ids:
+                    if isinstance(previous.get(model), dict):
+                        kept_model = dict(previous[model])
+                        kept_model.setdefault("name", model)
+                        entry["models"][model] = kept_model
         for key, value in provider.extra.items():
             if not key or key in MANAGED_ENTRY_KEYS:
                 continue
@@ -172,6 +172,8 @@ class OpenCodeAdapter(Adapter):
             base_url=str(options.get("baseURL") or ""),
             api_key=str(options.get("apiKey") or ""),
             model=model,
+            models=[str(key) for key in entry.get("models", {}) if str(key) != model]
+            if isinstance(entry.get("models"), dict) else [],
             npm=npm if npm in NPM_PACKAGES else NPM_ANTHROPIC,
             extra=extra,
         )

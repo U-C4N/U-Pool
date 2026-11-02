@@ -171,3 +171,22 @@ def test_a_sidecar_is_kept_before_the_first_write():
     backup_path = paths.opencode_config_file().with_suffix(".json.backup")
     assert str(backup_path) in result.backups
     assert "tokyonight" in backup_path.read_text(encoding="utf-8")
+
+
+def test_multiple_models_round_trip_and_keep_metadata_for_each_remaining_model():
+    adapter = OpenCodeAdapter()
+    provider = relay(models=["second", "third"])
+    adapter.apply(provider)
+    data = read_live()
+    data["provider"][provider.slug]["models"]["second"]["limit"] = {"context": 123456}
+    write_live(data)
+    adapter.apply(relay(models=["second", "fourth"]))
+    entry = read_live()["provider"][provider.slug]
+    assert list(entry["models"]) == [provider.model, "second", "fourth"]
+    assert entry["models"]["second"]["limit"] == {"context": 123456}
+    assert read_live()["model"] == f"{provider.slug}/{provider.model}"
+    imported = adapter.import_live()
+    assert imported is not None
+    assert imported.models == ["second", "fourth"]
+    adapter.apply(Provider(app=APP_OPENCODE, name="Official", official=True))
+    assert "provider" not in read_live()

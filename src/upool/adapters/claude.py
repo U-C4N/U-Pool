@@ -1,8 +1,9 @@
 """Claude Code adapter - ``~/.claude/settings.json`` and the Anthropic variables.
 
-U-Pool owns four things in this file: the ``env`` block, the two ``permissions``
-keys behind the advanced checkboxes and ``enableAllProjectMcpServers``. Nothing
-else. ``enabledPlugins``, ``extraKnownMarketplaces``, ``theme``, ``model``,
+U-Pool owns the ``env`` variables and permission keys described below, plus the
+individual ``modelPicker.options`` rows it appends for additional models. Other
+picker rows, picker metadata and ``availableModels`` restrictions stay untouched.
+``enabledPlugins``, ``extraKnownMarketplaces``, ``theme``, ``model``,
 ``effortLevel``, ``hooks``, ``statusLine`` and ``permissions.allow`` are Claude
 Code's own state, and a provider record holds nothing that could recreate them.
 
@@ -29,7 +30,9 @@ Code prefers this file, but everything else that inherits the user's environment
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .. import atomicio, backup, claims, paths, winenv
 from ..models import (
@@ -64,6 +67,8 @@ ENV_BLOCK_KEY = "env"
 # registry namespace: the same variable can be in both places for different
 # reasons, and a claim on one is not a claim on the other.
 SETTINGS_ENV_CLAIM = "claude_settings_env"
+MODEL_PICKER_KEY = "modelPicker"
+MODEL_PICKER_CLAIM = "claude_model_picker_rows"
 PERMISSIONS_KEY = "permissions"
 DEFAULT_MODE_KEY = "defaultMode"
 BYPASS_MODE = "bypassPermissions"
@@ -157,6 +162,7 @@ class ClaudeAdapter(Adapter):
         claims.write(SETTINGS_ENV_CLAIM, [name for name in env if name not in MANAGED_KEYS])
 
         result.removed.extend(self._apply_toggles(settings, provider))
+        self._apply_model_picker(settings, provider, result)
 
         sidecar = backup.sidecar(settings_path)
         if sidecar:
@@ -166,6 +172,69 @@ class ClaudeAdapter(Adapter):
 
         self._apply_env(provider, result)
         return result
+
+    @staticmethod
+    def _apply_model_picker(settings: dict, provider: Provider, result: ApplyResult) -> None:
+        """Append model rows, reclaiming only exact rows a previous switch added."""
+        wanted = provider.model_ids if provider.models and not provider.official else []
+        previous = settings.get(MODEL_PICKER_KEY)
+        if MODEL_PICKER_KEY in settings and not isinstance(previous, dict):
+            if wanted:
+                result.warnings.append("Claude modelPicker is not an object; your setting was preserved.")
+            claims.write(MODEL_PICKER_CLAIM, [])
+            return
+        picker = dict(previous or {})
+        options = picker.get("options", [])
+        if not isinstance(options, list):
+            if wanted:
+                result.warnings.append("Claude modelPicker.options is not a list; your setting was preserved.")
+            claims.write(MODEL_PICKER_CLAIM, [])
+            return
+
+        owned: set[str] = set()
+        for claim in claims.read(MODEL_PICKER_CLAIM):
+            try:
+                # Claim names are case-insensitive elsewhere; hex keeps distinct
+                # case-sensitive model IDs distinct without changing that contract.
+                encoded = bytes.fromhex(claim[4:]).decode("utf-8") if claim.startswith("hex:") else claim
+                row = json.loads(encoded)
+            except (TypeError, ValueError, UnicodeDecodeError):
+                continue
+            if isinstance(row, dict) and set(row) == {"model"} and isinstance(row["model"], str):
+                owned.add(row["model"])
+
+        kept: list = []
+        reclaimed = False
+        wanted_set = set(wanted)
+        for row in options:
+            model = row.get("model") if isinstance(row, dict) else None
+            if isinstance(model, str) and model in owned and row == {"model": model}:
+                owned.remove(model)
+                reclaimed = True
+                if model not in wanted_set:
+                    result.removed.append(f"{MODEL_PICKER_KEY}.options.{model}")
+            else:
+                kept.append(row)
+        present = {row.get("model") for row in kept if isinstance(row, dict) and isinstance(row.get("model"), str)}
+        added: list[str] = []
+        for model in wanted:
+            if model not in present:
+                row = {"model": model}
+                kept.append(row)
+                encoded = json.dumps(row, separators=(",", ":")).encode("utf-8").hex()
+                added.append(f"hex:{encoded}")
+                present.add(model)
+        claims.write(MODEL_PICKER_CLAIM, added)
+        if not reclaimed and not added:
+            return
+        if kept:
+            picker["options"] = kept
+        else:
+            picker.pop("options", None)
+        if picker:
+            settings[MODEL_PICKER_KEY] = picker
+        else:
+            settings.pop(MODEL_PICKER_KEY, None)
 
     @staticmethod
     def _merge_env(old_env: dict, wanted: dict[str, str]) -> tuple[dict, list[str]]:
@@ -275,6 +344,13 @@ class ClaudeAdapter(Adapter):
         }
         permissions = settings.get(PERMISSIONS_KEY)
         mode = permissions.get(DEFAULT_MODE_KEY) if isinstance(permissions, dict) else None
+        picker = settings.get(MODEL_PICKER_KEY)
+        options = picker.get("options") if isinstance(picker, dict) else None
+        models = list(dict.fromkeys(
+            row["model"] for row in options or []
+            if isinstance(row, dict) and isinstance(row.get("model"), str)
+            and row["model"] != str(env.get(MODEL_KEY, ""))
+        )) if isinstance(options, list) else []
         return Provider(
             app=APP_CLAUDE,
             name="Imported",
@@ -283,6 +359,7 @@ class ClaudeAdapter(Adapter):
             api_key=api_key,
             auth_style=auth_style,
             model=str(env.get(MODEL_KEY, "")),
+            models=models,
             small_fast_model=str(env.get(SMALL_FAST_MODEL_KEY, "")),
             extra=extra,
             bypass_permissions=mode == BYPASS_MODE,
@@ -299,7 +376,9 @@ class ClaudeAdapter(Adapter):
         url = provider.base_url.rstrip("/") + "/v1/models"
         headers = {"anthropic-version": "2023-06-01"}
         if provider.api_key:
-            if provider.auth_style == AUTH_TOKEN:
+            # Experiential accepts x-api-key for Messages, but its model catalogue
+            # uses the gateway's Bearer authentication regardless of that choice.
+            if provider.auth_style == AUTH_TOKEN or urlsplit(url).hostname == "api.experientiallabs.ai":
                 headers["authorization"] = f"Bearer {provider.api_key}"
             else:
                 headers["x-api-key"] = provider.api_key

@@ -35,16 +35,20 @@ const REFUSELESS: ProviderPreset = {
   base_url: "https://api.refuseless.com/v1",
   model: "glm-5.3-abliterated",
   note: "Load the complete live model catalogue in Advanced options.",
-  tint: "#111111",
+  tint: "#E90036",
+};
+
+const EXPERIENTIAL_LABS: ProviderPreset = {
+  id: "experiential-labs",
+  name: "Experiential Labs",
+  website: "https://experientiallabs.ai",
+  base_url: "https://api.experientiallabs.ai/v1",
+  model: "claude-opus-5",
+  note: "One gateway for catalog models. Load your available models in Advanced options.",
+  tint: "#0A0A0A",
 };
 
 export const CLAUDE_PRESETS: ProviderPreset[] = [
-  {
-    ...REFUSELESS,
-    base_url: "https://api.refuseless.com",
-    auth_style: "auth_token",
-    small_fast_model: "glm-5.3-flash-abliterated",
-  },
   {
     id: "custom",
     name: "Custom",
@@ -63,6 +67,18 @@ export const CLAUDE_PRESETS: ProviderPreset[] = [
     auth_style: "api_key",
     note: "Official Anthropic API — opus-4-8, sonnet-5, fable-5, sonnet-4-6/4-5, haiku-4-5",
     tint: "#D97757",
+  },
+  {
+    ...EXPERIENTIAL_LABS,
+    base_url: "https://api.experientiallabs.ai",
+    auth_style: "api_key",
+    small_fast_model: "claude-haiku-4.5",
+  },
+  {
+    ...REFUSELESS,
+    base_url: "https://api.refuseless.com",
+    auth_style: "auth_token",
+    small_fast_model: "glm-5.3-flash-abliterated",
   },
   {
     id: "codefast",
@@ -193,7 +209,6 @@ export const CLAUDE_PRESETS: ProviderPreset[] = [
 ];
 
 export const CODEX_PRESETS: ProviderPreset[] = [
-  { ...REFUSELESS, wire_api: "responses", env_key: "OPENAI_API_KEY" },
   {
     id: "custom",
     name: "Custom",
@@ -213,6 +228,8 @@ export const CODEX_PRESETS: ProviderPreset[] = [
     note: "Official OpenAI API",
     tint: "#10A37F",
   },
+  { ...EXPERIENTIAL_LABS, model: "gpt-5.6-sol", wire_api: "responses", env_key: "OPENAI_API_KEY" },
+  { ...REFUSELESS, wire_api: "responses", env_key: "OPENAI_API_KEY" },
   {
     id: "gemini",
     name: "Gemini",
@@ -452,7 +469,6 @@ export const CODEX_PRESETS: ProviderPreset[] = [
  * one record; each catalogue is written against the config file its app reads.
  */
 export const HERMES_PRESETS: ProviderPreset[] = [
-  { ...REFUSELESS, transport: "chat_completions" },
   {
     id: "custom",
     name: "Custom",
@@ -461,6 +477,8 @@ export const HERMES_PRESETS: ProviderPreset[] = [
     note: "Blank template",
     tint: "#8E8E93",
   },
+  { ...EXPERIENTIAL_LABS, transport: "chat_completions" },
+  { ...REFUSELESS, transport: "chat_completions" },
   {
     id: "kimi-coding",
     name: "Kimi For Coding",
@@ -515,7 +533,6 @@ export const HERMES_PRESETS: ProviderPreset[] = [
  * however OpenAI-shaped its URL looks.
  */
 export const OPENCODE_PRESETS: ProviderPreset[] = [
-  { ...REFUSELESS, npm: "@ai-sdk/openai-compatible" },
   {
     id: "custom",
     name: "Custom",
@@ -535,6 +552,8 @@ export const OPENCODE_PRESETS: ProviderPreset[] = [
     note: "Official OpenAI API",
     tint: "#10A37F",
   },
+  { ...EXPERIENTIAL_LABS, model: "gpt-5.5", npm: "@ai-sdk/openai-compatible" },
+  { ...REFUSELESS, npm: "@ai-sdk/openai-compatible" },
   {
     id: "gemini",
     name: "Gemini",

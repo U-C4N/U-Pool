@@ -197,6 +197,24 @@ def test_hermes_writes_no_environment_variables():
     assert HermesAdapter().env_vars(relay()) == {}
 
 
+def test_multiple_models_round_trip_and_keep_metadata_for_each_remaining_model():
+    adapter = HermesAdapter()
+    provider = relay(models=["second", "third"])
+    adapter.apply(provider)
+    data = yamlio.read(paths.hermes_config_file())
+    data["providers"][provider.slug]["models"]["second"]["context_length"] = 123456
+    write_live(yaml.safe_dump(data, sort_keys=False))
+    adapter.apply(relay(models=["second", "fourth"]))
+    entry = yamlio.read(paths.hermes_config_file())["providers"][provider.slug]
+    assert list(entry["models"]) == [provider.model, "second", "fourth"]
+    assert entry["models"]["second"]["context_length"] == 123456
+    imported = adapter.import_live()
+    assert imported is not None
+    assert imported.models == ["second", "fourth"]
+    adapter.apply(Provider(app=APP_HERMES, name="Official", official=True))
+    assert "providers" not in yamlio.read(paths.hermes_config_file())
+
+
 def test_a_sidecar_is_kept_before_the_first_write():
     write_live()
     settings.update({"backup_enabled": True})

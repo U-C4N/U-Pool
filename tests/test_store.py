@@ -38,6 +38,18 @@ def test_bootstrap_seeds_official_entry_per_app(store):
     assert paths.config_file().exists()
 
 
+@pytest.mark.parametrize("app", SUPPORTED_APPS)
+def test_additional_models_survive_save_edit_reload_and_duplicate(store, app):
+    saved = store.add(make(app=app, model="main", models=["second", "third"]))
+    loaded = Store().get(app, saved.id)
+    assert loaded.models == ["second", "third"]
+    loaded.models = ["third", "fourth"]
+    store.update(loaded)
+    assert Store().get(app, saved.id).models == ["third", "fourth"]
+    copied = store.duplicate(app, saved.id)
+    assert copied.models == ["third", "fourth"]
+
+
 def test_a_config_written_by_an_older_build_gains_the_apps_added_since():
     """An upgraded install must get the new tabs seeded, not left empty.
 

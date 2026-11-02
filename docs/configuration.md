@@ -51,6 +51,17 @@ Every file U-Pool is about to change is copied once beside the original as `<fil
 
 </details>
 
+## Multiple models
+
+Under **Advanced options → Provider models**, enter one model ID or comma-separated IDs and select **Add models**. **Load models** retrieves the endpoint's live catalogue; selecting an entry adds or removes it from the saved list. Each saved model has a **Set default** button and a remove control. The **Default model** field remains editable, and the list is saved, duplicated and exported with the provider profile.
+
+- **Claude Code:** additional model IDs are appended to `modelPicker.options` as `{ "model": "id" }` entries. The `/model` picker requires Claude Code 2.1.242 or later. U-Pool records only the entries it adds; existing custom entries, `availableModels`, model metadata and other picker settings are preserved. An existing `availableModels` policy can still restrict which entries are selectable. Clearing the list or switching away removes only unchanged entries U-Pool added.
+- **Hermes and OpenCode:** all configured IDs are included in the native provider's `models` map. The selected default remains the active model. Existing metadata for retained model IDs is preserved.
+- **Codex:** the list is stored with the U-Pool profile. Choosing a default and saving an active profile changes the configured model; additional IDs are not injected into Codex's model picker.
+- **Claude Desktop:** model lists are stored with the profile. This tab remains preview-only and writes no client configuration.
+
+Experiential Labs is available in every provider catalogue. Claude uses `https://api.experientiallabs.ai` with `x-api-key`; OpenAI-compatible clients use `https://api.experientiallabs.ai/v1`. See the [gateway's official coding-agent setup](https://platform.experientiallabs.ai/docs/coding-agents). Model discovery uses the authenticated `/v1/models` endpoint, so the live catalogue remains authoritative.
+
 ## The Cursor pool
 
 The Cursor tab stores account sessions separately from provider profiles. Each card shows the account, plan, usage and whether it can be activated in the desktop client.
