@@ -114,6 +114,34 @@ See the [API setup guide](docs/api-gateway.md) for supported controls, Hermes se
 
 ## Run from source
 
+### Automatic Windows setup
+
+On **Windows 10/11 x64**, download and extract the source ZIP or clone this
+repository, then double-click **[install.bat](install.bat)** in the source folder
+and accept the administrator prompt. Internet access is required.
+
+The installer checks Python and Node.js, installs missing or incompatible versions
+through WinGet or official installers, and updates npm to the latest release
+compatible with Node.js. It creates or reuses `.venv`, installs the Python
+dependencies, runs `npm ci` and the UI build, verifies the installation, and starts
+U-Pool. You do not need to install Python, Node.js or npm beforehand.
+
+If a step fails, the installer stops and shows the error. Logs are saved in
+`build/install-logs`. Run `install.bat` again to retry installation and rebuild.
+To start the app later without reinstalling, run this from the source folder:
+
+```powershell
+.venv\Scripts\python.exe -m upool
+```
+
+The API pool's additional components still require the preparation step below.
+For the development and packaging commands below, activate the environment with
+`.\.venv\Scripts\Activate.ps1` or use `.venv\Scripts\python.exe` instead of `python`.
+The installer does not install the optional developer dependencies; add them with
+`.venv\Scripts\python.exe -m pip install -e ".[dev]"` if needed.
+
+### Manual setup
+
 Requires **Python 3.11+** and **Node.js 20.9+** for the UI build.
 
 ```powershell
@@ -164,7 +192,7 @@ python scripts/build.py
 python scripts/build.py --skip-ui --reuse-proxy-worker
 ```
 
-Outputs: `dist/U-Pool/U-Pool.exe`, `dist/U-Pool-1.0.1-win64.zip` and `dist/SHA256SUMS.txt`. The build prepares an isolated API worker, includes license notices, and smoke-tests the executable. Browser/engine downloads use pinned versions and verified hashes.
+Outputs: `dist/U-Pool/U-Pool.exe`, `dist/U-Pool-1.0.2-win64.zip` and `dist/SHA256SUMS.txt`. The build prepares an isolated API worker, includes license notices, and smoke-tests the executable. Browser/engine downloads use pinned versions and verified hashes.
 
 Review the [outstanding validation](docs/v1-validation.md#outstanding-validation) and document any remaining limitations when publishing. Attach the ZIP and checksum file to a GitHub release tagged `vX.Y.Z` for the in-app updater.
 
